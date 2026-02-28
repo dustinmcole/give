@@ -6,6 +6,7 @@ import {
   createConnectAccount,
   createAccountLink,
 } from "../lib/stripe.js";
+import { syncDonorToSalesforce, syncDonationToSalesforce } from "../lib/salesforce-sync.js";
 import type Stripe from "stripe";
 
 export const stripeRoutes = new Hono();
@@ -229,6 +230,15 @@ async function handlePaymentIntentSucceeded(
   console.log(
     `TODO: Queue receipt email for donation ${donationId} to donor ${donation.donorId}`
   );
+
+  // Salesforce sync (fire and forget)
+  syncDonorToSalesforce(donation.donorId, donation.orgId).catch(err => {
+    console.error(`Salesforce sync failed for donor ${donation.donorId}:`, err);
+  });
+  
+  syncDonationToSalesforce(donation.id, donation.orgId).catch(err => {
+    console.error(`Salesforce sync failed for donation ${donation.id}:`, err);
+  });
 }
 
 async function handlePaymentIntentFailed(

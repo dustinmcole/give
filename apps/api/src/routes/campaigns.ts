@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "@give/db";
+import { syncCampaignToSalesforce } from "../lib/salesforce-sync.js";
 
 export const campaignRoutes = new Hono();
 
@@ -142,6 +143,10 @@ campaignRoutes.post("/", async (c) => {
         allowCustomAmount: input.allowCustomAmount,
         allowRecurring: input.allowRecurring,
       },
+    });
+
+    syncCampaignToSalesforce(campaign.id, campaign.orgId).catch(err => {
+      console.error(`Salesforce sync failed for campaign ${campaign.id}:`, err);
     });
 
     return c.json(campaign, 201);
