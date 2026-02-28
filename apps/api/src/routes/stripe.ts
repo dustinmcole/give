@@ -246,13 +246,13 @@ async function handlePaymentIntentSucceeded(
     });
     
     const sequentialNumber = String(donationCount).padStart(6, '0');
-    const receiptNumber = \`GIVE-\${year}-\${sequentialNumber}\`;
+    const receiptNumber = `GIVE-${year}-${sequentialNumber}`;
 
     if (resend) {
       const html = generateDonationReceiptHtml({
         orgName: donation.org.name,
         orgEin: donation.org.ein,
-        donorName: \`\${donation.donor.firstName} \${donation.donor.lastName}\`.trim(),
+        donorName: `${donation.donor.firstName} ${donation.donor.lastName}`.trim(),
         amountCents: donation.totalChargedCents > 0 ? donation.totalChargedCents : donation.amountCents,
         date: donation.createdAt,
         receiptNumber,
@@ -261,11 +261,11 @@ async function handlePaymentIntentSucceeded(
       await resend.emails.send({
         from: fromEmail,
         to: donation.donor.email,
-        subject: \`Your tax receipt from \${donation.org.name}\`,
+        subject: `Your tax receipt from ${donation.org.name}`,
         html,
       });
       
-      console.log(\`Receipt \${receiptNumber} sent to \${donation.donor.email}\`);
+      console.log(`Receipt ${receiptNumber} sent to ${donation.donor.email}`);
     } else {
       console.warn("RESEND_API_KEY not configured, skipping receipt email");
     }
@@ -303,7 +303,7 @@ async function handlePaymentIntentFailed(
   });
 
   console.log(
-    \`Donation \${donationId} payment failed. Reason: \${paymentIntent.last_payment_error?.message ?? "unknown"}\`
+    `Donation ${donationId} payment failed. Reason: ${paymentIntent.last_payment_error?.message ?? "unknown"}`
   );
 }
 
@@ -342,7 +342,7 @@ async function handleAccountUpdated(account: Stripe.Account) {
   });
 
   console.log(
-    \`Organization \${org.id} (\${org.name}) Stripe status updated. Onboarded: \${isOnboarded}\`
+    `Organization ${org.id} (${org.name}) Stripe status updated. Onboarded: ${isOnboarded}`
   );
 }
 
