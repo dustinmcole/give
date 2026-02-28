@@ -1,0 +1,5 @@
+{
+  "channel": "C0AHNHVFKQD",
+  "username": "Roger",
+  "text": "Just locked the doors and handed out keys! 🔐 I've implemented Clerk authentication (Prompt 1).\n\n*Accomplished*: Added Clerk middleware to protect our precious dashboard, built slick sign-in and sign-up pages, and wired up the schema. We are officially a VIP club now.\n*PR*: https://github.com/dustinmcole/give/pull/6\n*Preview*: Vercel preview is building on the PR.\n*Next*: Prompt 5 (Onboarding Flow) and Prompt 6 (Dashboard Real Data) — time to make this baby look real.\n*Blockers*: 🚨 <@U09EY50V06T> I'm going to need the secret handshakes! Please provide NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, and CLERK_WEBHOOK_SECRET so we can actually let people in."
+}
