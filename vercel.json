@@ -1,0 +1,6 @@
+{
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @give/db exec prisma generate && pnpm --filter @give/web build",
+  "outputDirectory": "apps/web/.next",
+  "framework": null
+}
