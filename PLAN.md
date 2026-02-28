@@ -140,7 +140,8 @@ These are table stakes. Cannot launch without them.
 | **Auctions** | P2 | Silent auction, mobile bidding, auto-payment |
 | **Advanced automation/workflows** | P2 | Drip sequences, triggered emails, donor journey automation |
 | **AI-powered donor insights** | P2 | Prospect scoring, churn prediction, suggested actions |
-| **Native integrations** | P2 | Salesforce, Mailchimp, QuickBooks, HubSpot — native, not just Zapier |
+| **Salesforce integration** | P1 (fast-follow) | Native NPSP connector — real-time, free. Ship within 60–90 days of launch. Beat Give Lively's hourly batch. Full design in `docs/salesforce-integration.md`. |
+| **Other native integrations** | P2 | Mailchimp, QuickBooks, HubSpot — native, not just Zapier |
 | **Advanced reporting** | P2 | Custom reports, donor segmentation, cohort analysis |
 | **Memberships** | P2 | Tiered membership programs with auto-renewal |
 | **Online store** | P2 | Merch/product sales with inventory management |
@@ -324,7 +325,7 @@ With donor fee coverage:
 - [ ] Database multi-tenancy approach
 - [ ] Hosting provider selection
 - [ ] Domain and infrastructure setup
-- [x] **Salesforce integration architecture** — **RESEARCHED (2026-02-28).** See `docs/salesforce-integration-research.md`. Key decisions: external API connector (not managed package) for v1; JWT Bearer OAuth for server-to-server auth; REST API + sObject Collections for real-time sync; NPSP first then NPC; external ID upsert for idempotent duplicate-safe syncs; email-first dedup with external ID as primary key; persistent job queue with exponential backoff; CDC via Pub/Sub API for future Salesforce→Give sync (v2). 7 custom External ID fields required in customer org.
+- [x] **Salesforce integration architecture** — **DECIDED (2026-02-28).** See `docs/salesforce-integration.md`. Priority upgraded P2 → P1 fast-follow (ship Month 2–3 post-launch). Key decisions: (1) External API connector (not managed package) for v1 — Give servers call Salesforce REST API; (2) JWT Bearer OAuth for server-to-server auth; (3) Composite Graph API for atomic Contact + Opp upsert in single call; (4) Real-time event-triggered sync — not hourly batch like Give Lively; (5) NPSP first, NPC in v2; (6) External ID upsert + email fallback deduplication; (7) Persistent job queue with exponential backoff + dead letter at attempt 5; (8) 7 custom External ID fields required in customer org; (9) Start AppExchange ISV Partner registration at Month 2 — listing live ~Month 6–8 given 4–6 month review timeline. 15% AppExchange Checkout revenue share likely doesn't affect Give's fee model (confirm with Salesforce legal).
 
 ---
 
@@ -338,6 +339,13 @@ With donor fee coverage:
 | **3 — Campaigns** | Fundraising pages, P2P, embeddable widgets | Week 10-12 |
 | **4 — Polish** | Onboarding flow, migration tools, documentation | Week 13-14 |
 | **5 — Beta** | Private beta with 10-20 nonprofits | Week 15-16 |
+| **Post-Launch Month 2** | Start Salesforce ISV Partner registration (parallel track) | Month 2 |
+| **Post-Launch Month 2–3** | Salesforce MVP connector ships: NPSP, real-time, Contact + Opp + Campaign + Recurring | Month 2–3 |
+| **Post-Launch Month 3** | Begin AppExchange managed package + security review prep | Month 3 |
+| **Post-Launch Month 4–5** | Submit AppExchange security review | Month 4–5 |
+| **Post-Launch Month 6** | GAU Allocations + P2P sync + event sync (Salesforce v1.5) | Month 6 |
+| **Post-Launch Month 6–8** | AppExchange listing live (if review passes) | Month 6–8 |
+| **Post-Launch Month 9–12** | NPC (Agentforce Nonprofit) support + bidirectional sync (Salesforce v2) | Month 9–12 |
 | **6 — Launch** | Public launch | Week 17-18 |
 
 ---
@@ -385,6 +393,43 @@ Detailed competitive research was conducted on 2026-02-28 covering:
 - Payment processing landscape (Stripe nonprofit rates, ACH opportunity)
 - Regulatory requirements (PCI DSS 4.0.1, state charitable solicitation)
 - 15+ additional competitors mapped
+
+### Salesforce Integration Research (2026-02-28)
+
+Comprehensive research across 4 parallel agents: nonprofit Salesforce landscape, competitor integration analysis, AppExchange requirements, and technical architecture. Full design document at `docs/salesforce-integration.md`. Key findings:
+
+**Market landscape:**
+- ~40,000–55,000 nonprofits globally on Salesforce, ~3–4% overall US nonprofit penetration — concentrated in $1M–$10M+ revenue orgs
+- NPSP (Nonprofit Success Pack) has 35,000+ users; feature dev ended March 2023 but no EOL. Still 95%+ of the installed base.
+- Salesforce Nonprofit Cloud (NPC / Agentforce Nonprofit) launched Oct 2023 — only 25% of consulting firms have completed any NPC implementation. Future direction, minimal current adoption.
+- Small nonprofits (<$500K revenue) are poor Salesforce fits due to $7K–$30K implementation costs
+
+**Competitor matrix:**
+- **Give Lively:** Free, AppExchange-listed (5.0★), NPSP-only, one-way, hourly batch sync — their #1 selling point, and their biggest weakness is the 60-min data lag
+- **Givebutter:** Zapier only, no AppExchange listing — documented as their #1 weakness by independent reviewers
+- **Classy/GoFundMe Pro:** $250/month, near-real-time, bidirectional (partial), NPSP + NPC, AppExchange (4.58★)
+- **Donorbox:** $50/month, near-real-time, one-way, no AppExchange listing
+- **Funraise:** Free, real-time, open-source managed package on AppExchange, NPSP + NPC — most technically modern
+
+**Architecture decisions:**
+- v1: External API connector (Give servers → Salesforce REST API). No managed package required to ship.
+- JWT Bearer OAuth for server-to-server auth (no stored secrets)
+- Composite Graph API for atomic Contact + Opportunity upsert in a single HTTP round-trip
+- Real-time event-triggered sync (not hourly batch — beats Give Lively)
+- 7 custom External ID fields in customer's Salesforce org for idempotent upserts
+- Layered dedup: External ID primary → email lookup fallback → error queue for ambiguous matches
+- Persistent job queue: pending → in_flight → done | error → dead letter (alert admin at attempt 5)
+- NPSP first; abstract object-mapping layer for NPC in v2
+- v2: Bidirectional via Salesforce CDC + Pub/Sub API (gRPC) — 72h event retention, replayable
+
+**AppExchange strategy:**
+- 4–6 months from partner registration to live listing
+- $999 security review fee (paid app); plan $2,000 for one resubmission
+- 15% AppExchange Checkout revenue share (likely doesn't affect Give's percentage-fee model — confirm with legal)
+- Can ship API connector WITHOUT AppExchange listing — start ISV Partner registration at Month 2, listing live at Month 6–8
+- Trust signal: AppExchange is the primary discovery channel for nonprofit Salesforce admins
+
+**Priority change: P2 → P1 fast-follow.** Ship NPSP connector within 60–90 days of launch. Start AppExchange registration in parallel.
 
 ### Competitive UX Teardown (2026-02-28)
 Deep analysis of all three main competitors' public-facing donation experiences. Full teardown at `docs/competitive-ux-teardown.md`. Key findings:
@@ -1011,3 +1056,5 @@ org_ai_memory (org_id, memory_key, content text,
 | 2026-02-28 | **AI Strategy (Section 14) written + Campaign Marketing Tools added.** Core AI strategy documented: three-layer framework (always-on ML, surfaced insights, conversational agent). 8 product area feature inventory. Agent architecture (BullMQ event bus, background/scheduled/interactive). Cold start strategy. New DB tables. Pricing table. Campaign marketing tools added as Section G: social media content generator (platform-specific, milestone auto-posts), ad creative generator (FB/IG/Google Ads formatted), Google Ad Grants optimizer ($10K/month nonprofit grant — 90%+ of nonprofits waste it), email campaign builder (segmented sequences), Giving Tuesday campaign kit (one-click full kit), matching gift detection. Agent architecture extended with campaign.milestone and giving_tuesday triggers. | Strategy session |
 | 2026-02-28 | **GitHub + Vercel CI/CD setup.** GitHub repo created at dustinmcole/give (private). Branch protection conventions documented in GITHUB.md. GitHub Actions CI pipeline (type check + build on every PR). Vercel project give-web configured: root dir `apps/web`, framework Next.js, custom install/build commands for monorepo, auto-deploy on push to main, preview deployments on PRs. CI passing (TypeScript + Next.js build clean). | Deployment session |
 | 2026-02-28 | **State charitable solicitation registration research (platform/intermediary).** Comprehensive 50-state + DC analysis of whether Give must register as a professional fundraiser, professional solicitor, fundraising counsel, commercial co-venturer, or charitable fundraising platform. Full state-by-state matrix with statutes, bond amounts, and filing requirements. Key finding: Give likely qualifies as "professional solicitor/fundraiser" in ~38-40 states because it receives/controls funds via Stripe Connect application fees. Must also register as "Charitable Fundraising Platform" in CA (AB 488, effective 2024) and HI (Act 205, effective July 2026). Estimated Year 1 compliance cost: $28K-$88K. 8 Tier 1 states identified for pre-launch registration (CA, NY, FL, PA, OH, MA, CT, IL). Architectural implications documented (state disclosure engine, contract filing automation, financial reporting module). Full analysis at `docs/state-registration-research.md`. | Regulatory research session |
+| 2026-02-28 | **Salesforce integration — full research and architecture complete** (`docs/salesforce-integration.md`). **Priority upgraded: P2 → P1 fast-follow (ship Month 2–3).** 4 parallel research agents: (1) nonprofit Salesforce landscape — ~40K–55K orgs globally, ~3–4% overall US penetration, concentrated in $1M–$10M+ orgs; NPSP is 95%+ of installed base, NPC has minimal real-world adoption; (2) competitor analysis — Give Lively is free NPSP-only hourly batch (their #1 differentiator + biggest weakness); Givebutter is Zapier-only (their documented #1 weakness); Classy is $250/mo bidirectional near-real-time NPSP+NPC; Donorbox is $50/mo no AppExchange; Funraise is free real-time open-source NPSP+NPC; (3) AppExchange — 4–6 month timeline, $999 security review, 15% revenue share on AppExchange Checkout, managed package required for listing; (4) technical architecture — external API connector (not managed package) for v1; JWT Bearer OAuth; Composite Graph API for atomic Contact+Opp upsert; external ID upsert with email dedup fallback; 7 custom External ID fields; persistent job queue with exponential backoff; CDC + Pub/Sub API for bidirectional sync in v2. **Competitive pitch once shipped:** "Native Salesforce NPSP sync — free, real-time, no Zapier, no $250/mo add-on. Beats Give Lively's hourly batch." Start AppExchange ISV Partner registration at Month 2; listing targets Month 6–8. | Salesforce research session |
+| 2026-02-28 | **Comprehensive legal & compliance research complete** (`docs/compliance-research.md`). 5 research areas covered: (1) **State charitable solicitation** — ~38-40 states require platform registration as Professional Solicitor/Fundraiser; CA AB 488 (Charitable Fundraising Platform law, effective 2024) and HI Act 205 (effective July 2026) are new CFP-specific categories; 8 Tier 1 states for pre-launch registration (CA, NY, FL, PA, OH, MA, CT, IL); Year 1 compliance cost $28K-$88K; architectural requirements: state disclosure engine, contract filing automation, financial reporting module. (2) **PCI DSS 4.0.1** — SAQ A applies (Stripe handles all card data via iframes); must complete SAQ A + AOC annually via Stripe PCI Dashboard; quarterly ASV scans required (Req 11.3.2); new SAQ A eligibility criterion (Jan 2025): must confirm donation pages are not susceptible to script attacks — satisfy via CSP headers + Stripe confirmation; never bypass Stripe Elements. (3) **501(c)(3) verification** — Use Pactman Nonprofit Check Plus API (free tier 200/month) for MVP; IRS Pub 78 (not EO BMF) is primary source — deductibility code A = gold standard 501(c)(3) confirmation; self-host IRS bulk data at scale (zero cost); ProPublica API for donor-facing 990 enrichment only; Candid/GuideStar too expensive. Decision: instant auto-approval for clean Pub 78 lookups, structured self-cert for edge cases. (4) **Privacy Policy & ToS** — Build to CCPA/CPRA standards (superset of all 20+ state laws); explicit "nonprofits own their donor data" clause as competitive differentiator; binding arbitration with class action waiver (industry standard); Givebutter weaknesses identified (no CCPA compliance, no retention policy, perpetual license claim); Zeffy is more compliant. (5) **Money transmitter licenses** — No state MTLs required: Stripe Connect Express structure means Give never holds donor funds; payment processor exemption (31 C.F.R. §1010.100(ff)(5)(ii)) means no FinCEN MSB registration either; agent of payee doctrine applies (California codified 2021); no major competitor holds MTLs. CA AB 488 is a separate (charitable solicitation) obligation, not MTL. **Action required before launch:** informal MTL legal opinion memo (~$5K-$12K); CA AB 488 registration; Tier 1 state PF/PS registrations; PCI SAQ A; 501c3 verification API. | Compliance research session |
