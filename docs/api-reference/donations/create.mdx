@@ -1,0 +1,102 @@
+---
+title: Create Donation
+api: POST /api/donations
+description: "Create a donation and initiate payment processing."
+---
+
+# Create Donation
+
+Creates a donation record, calculates fees, and returns a Stripe PaymentIntent client secret for completing the payment on the frontend.
+
+## Request Body
+
+<ParamField body="amount" type="integer" required>
+  Donation amount in cents (e.g., 5000 = $50.00)
+</ParamField>
+
+<ParamField body="currency" type="string" default="usd">
+  Three-letter ISO currency code
+</ParamField>
+
+<ParamField body="frequency" type="string" required>
+  One of: `one_time`, `monthly`, `quarterly`, `annual`
+</ParamField>
+
+<ParamField body="paymentMethod" type="string" required>
+  One of: `card`, `ach`, `apple_pay`, `google_pay`
+</ParamField>
+
+<ParamField body="coverFees" type="boolean" default="false">
+  Whether the donor is covering processing and platform fees
+</ParamField>
+
+<ParamField body="campaignId" type="string" required>
+  Campaign ID to attribute this donation to
+</ParamField>
+
+<ParamField body="donor" type="object" required>
+  Donor information
+
+  <Expandable>
+    <ParamField body="email" type="string" required>Email address</ParamField>
+    <ParamField body="firstName" type="string" required>First name</ParamField>
+    <ParamField body="lastName" type="string" required>Last name</ParamField>
+    <ParamField body="anonymous" type="boolean" default="false">Hide donor from public donor roll</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="dedication" type="object">
+  Optional dedication
+
+  <Expandable>
+    <ParamField body="type" type="string">Either `in_honor` or `in_memory`</ParamField>
+    <ParamField body="name" type="string">Name of the person being honored</ParamField>
+    <ParamField body="message" type="string">Optional message</ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+```json
+{
+  "donation": {
+    "id": "clx1111111111",
+    "amountCents": 5000,
+    "status": "PENDING",
+    "frequency": "ONE_TIME"
+  },
+  "clientSecret": "pi_1234_secret_5678",
+  "fees": {
+    "donationAmount": 5000,
+    "processingFee": 140,
+    "platformFee": 50,
+    "totalCharged": 5000,
+    "netToOrg": 4810
+  }
+}
+```
+
+<Info>
+  Use the `clientSecret` with Stripe Elements on the frontend to collect payment details and confirm the PaymentIntent.
+</Info>
+
+## Example
+
+```bash
+curl -X POST https://api.give.dev/api/donations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 5000,
+    "currency": "usd",
+    "frequency": "monthly",
+    "paymentMethod": "card",
+    "coverFees": true,
+    "campaignId": "clx9876543210",
+    "donor": {
+      "email": "jane@example.com",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "anonymous": false
+    }
+  }'
+```

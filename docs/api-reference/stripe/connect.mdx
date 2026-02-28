@@ -1,0 +1,26 @@
+---
+title: Create Stripe Connect Account
+api: POST /api/stripe/connect
+description: "Set up Stripe Connect for an organization."
+---
+
+# Create Stripe Connect Account
+
+Creates a Stripe Connect Express account for an organization and returns the onboarding URL.
+
+## Request Body
+
+<ParamField body="orgId" type="string" required>Organization ID</ParamField>
+
+## Response
+
+```json
+{
+  "accountId": "acct_1234567890",
+  "onboardingUrl": "https://connect.stripe.com/setup/e/..."
+}
+```
+
+<Info>
+  Redirect the organization admin to the `onboardingUrl` to complete Stripe's identity verification and bank account setup. This typically takes 2-5 minutes.
+</Info>

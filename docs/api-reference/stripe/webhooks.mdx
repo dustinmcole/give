@@ -1,0 +1,35 @@
+---
+title: Stripe Webhooks
+description: "How Give handles Stripe webhook events."
+---
+
+# Stripe Webhooks
+
+Give listens for Stripe webhook events to keep donation records in sync with payment status.
+
+## Endpoint
+
+```
+POST /api/stripe/webhooks
+```
+
+This endpoint is called by Stripe, not by your application. Configure it in your [Stripe Dashboard](https://dashboard.stripe.com/webhooks).
+
+## Events Handled
+
+| Event | Action |
+|-------|--------|
+| `payment_intent.succeeded` | Updates donation to SUCCEEDED. Increments donor and campaign aggregates. Queues receipt email. |
+| `payment_intent.payment_failed` | Updates donation to FAILED. Logs failure reason. |
+| `account.updated` | Checks if Stripe Connect account is fully onboarded. Transitions org from ONBOARDING to ACTIVE. |
+
+## Webhook Signature Verification
+
+All webhook requests are verified using the `STRIPE_WEBHOOK_SECRET` to ensure they originate from Stripe.
+
+## Setup
+
+1. In Stripe Dashboard, go to **Developers > Webhooks**
+2. Add endpoint: `https://api.give.dev/api/stripe/webhooks`
+3. Select events: `payment_intent.succeeded`, `payment_intent.payment_failed`, `account.updated`
+4. Copy the signing secret and set it as `STRIPE_WEBHOOK_SECRET` in your environment

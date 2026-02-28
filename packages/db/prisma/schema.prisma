@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Organizations ──────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  ein       String?  // IRS EIN for 501(c)(3) verification
+  website   String?
+  logoUrl   String?
+  planTier  PlanTier @default(BASIC)
+  status    OrgStatus @default(ONBOARDING)
+
+  // Stripe Connect
+  stripeAccountId   String?  @unique
+  stripeOnboarded   Boolean  @default(false)
+  payoutSchedule    PayoutSchedule @default(WEEKLY)
+
+  // Settings
+  defaultCurrency   String   @default("usd")
+  coverFeesDefault  Boolean  @default(false) // suggest cover-fees to donors by default
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      OrgMember[]
+  campaigns  Campaign[]
+  donations  Donation[]
+  donors     Donor[]
+
+  @@map("organizations")
+}
+
+enum PlanTier {
+  BASIC // 1% platform fee
+  PRO   // 2% platform fee
+}
+
+enum OrgStatus {
+  ONBOARDING
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum PayoutSchedule {
+  DAILY
+  WEEKLY
+  MONTHLY
+  MANUAL
+}
+
+// ─── Users & Membership ─────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  firstName     String
+  lastName      String
+  passwordHash  String?  // null if using OAuth
+  avatarUrl     String?
+  emailVerified Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships OrgMember[]
+
+  @@map("users")
+}
+
+model OrgMember {
+  id     String  @id @default(cuid())
+  role   OrgRole @default(EDITOR)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  orgId  String
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, orgId])
+  @@map("org_members")
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+// ─── Campaigns ──────────────────────────────────────────
+
+model Campaign {
+  id          String         @id @default(cuid())
+  title       String
+  slug        String
+  description String?
+  type        CampaignType   @default(DONATION)
+  status      CampaignStatus @default(DRAFT)
+
+  goalAmountCents Int?       // fundraising goal in cents
+  raisedAmountCents Int      @default(0) // cached total
+  donationCount     Int      @default(0) // cached count
+
+  // Display
+  coverImageUrl String?
+  color         String?      // brand color hex
+  showDonorRoll Boolean      @default(true)
+  showGoal      Boolean      @default(true)
+
+  // Scheduling
+  startDate DateTime?
+  endDate   DateTime?
+
+  // Recurring defaults
+  suggestedAmounts Int[]     // cents, e.g. [2500, 5000, 10000, 25000]
+  allowCustomAmount Boolean  @default(true)
+  allowRecurring    Boolean  @default(true)
+
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  donations Donation[]
+
+  @@unique([orgId, slug])
+  @@map("campaigns")
+}
+
+enum CampaignType {
+  DONATION
+  PEER_TO_PEER
+  EVENT
+  MEMBERSHIP
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+// ─── Donors ─────────────────────────────────────────────
+
+model Donor {
+  id        String  @id @default(cuid())
+  email     String
+  firstName String
+  lastName  String
+  phone     String?
+  anonymous Boolean @default(false)
+
+  // Aggregates (cached)
+  totalGivenCents Int @default(0)
+  donationCount   Int @default(0)
+  firstDonationAt DateTime?
+  lastDonationAt  DateTime?
+
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  donations Donation[]
+  tags      DonorTag[]
+
+  @@unique([email, orgId])
+  @@map("donors")
+}
+
+model DonorTag {
+  id    String @id @default(cuid())
+  name  String
+
+  donorId String
+  donor   Donor  @relation(fields: [donorId], references: [id], onDelete: Cascade)
+
+  @@unique([donorId, name])
+  @@map("donor_tags")
+}
+
+// ─── Donations ──────────────────────────────────────────
+
+model Donation {
+  id            String         @id @default(cuid())
+  amountCents   Int            // donation amount in cents
+  currency      String         @default("usd")
+  status        DonationStatus @default(PENDING)
+  frequency     DonationFrequency @default(ONE_TIME)
+
+  // Fees
+  processingFeeCents Int       @default(0)
+  platformFeeCents   Int       @default(0)
+  netAmountCents     Int       @default(0) // what the nonprofit receives
+  coverFees          Boolean   @default(false)
+  totalChargedCents  Int       @default(0) // what the donor was charged
+
+  // Payment
+  paymentMethod      PaymentMethodType?
+  stripePaymentIntentId String? @unique
+  stripeSubscriptionId  String? // for recurring
+  stripeCustomerId      String?
+
+  // Dedication
+  dedicationType String?  // "in_honor" or "in_memory"
+  dedicationName String?
+  dedicationMessage String?
+
+  // Receipt
+  receiptSentAt DateTime?
+  receiptNumber String?
+
+  donorId    String
+  donor      Donor        @relation(fields: [donorId], references: [id])
+
+  campaignId String
+  campaign   Campaign     @relation(fields: [campaignId], references: [id])
+
+  orgId      String
+  org        Organization @relation(fields: [orgId], references: [id])
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([orgId, createdAt])
+  @@index([donorId])
+  @@index([campaignId])
+  @@index([stripePaymentIntentId])
+  @@map("donations")
+}
+
+enum DonationStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  DISPUTED
+}
+
+enum DonationFrequency {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum PaymentMethodType {
+  CARD
+  ACH
+  APPLE_PAY
+  GOOGLE_PAY
+}

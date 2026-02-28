@@ -1,0 +1,37 @@
+---
+title: Get Organization
+api: GET /api/orgs/{id}
+description: "Retrieve an organization by ID with aggregate statistics."
+---
+
+# Get Organization
+
+Returns an organization's details along with aggregate fundraising statistics.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Organization ID (CUID)
+</ParamField>
+
+## Response
+
+```json
+{
+  "id": "clx1234567890",
+  "name": "Habitat for Humanity",
+  "slug": "habitat-for-humanity",
+  "ein": "91-1234567",
+  "status": "ACTIVE",
+  "planTier": "BASIC",
+  "stripeOnboarded": true,
+  "payoutSchedule": "WEEKLY",
+  "createdAt": "2026-02-28T12:00:00.000Z",
+  "stats": {
+    "totalRaisedCents": 1250000,
+    "donationCount": 347,
+    "campaignCount": 5,
+    "donorCount": 289
+  }
+}
+```

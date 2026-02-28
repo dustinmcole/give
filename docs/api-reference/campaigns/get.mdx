@@ -1,0 +1,32 @@
+---
+title: Get Campaign
+api: GET /api/campaigns/{id}
+description: "Retrieve a campaign with live statistics."
+---
+
+# Get Campaign
+
+Returns campaign details with real-time aggregate statistics.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>Campaign ID</ParamField>
+
+## Response
+
+```json
+{
+  "id": "clx9876543210",
+  "title": "Annual Fund 2026",
+  "slug": "annual-fund-2026",
+  "type": "DONATION",
+  "status": "ACTIVE",
+  "goalAmountCents": 5000000,
+  "stats": {
+    "totalRaisedCents": 1250000,
+    "donationCount": 347,
+    "goalProgress": 25.0
+  },
+  "createdAt": "2026-02-28T12:00:00.000Z"
+}
+```

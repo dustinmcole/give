@@ -1,0 +1,35 @@
+---
+title: Create Campaign
+api: POST /api/campaigns
+description: "Create a new fundraising campaign."
+---
+
+# Create Campaign
+
+Creates a new campaign for an organization.
+
+## Request Body
+
+<ParamField body="title" type="string" required>Campaign title</ParamField>
+<ParamField body="slug" type="string" required>URL-friendly identifier, unique within the org</ParamField>
+<ParamField body="orgId" type="string" required>Organization ID</ParamField>
+<ParamField body="type" type="string" default="donation">One of: `donation`, `peer_to_peer`, `event`, `membership`</ParamField>
+<ParamField body="goalAmountCents" type="integer">Fundraising goal in cents</ParamField>
+<ParamField body="suggestedAmounts" type="integer[]">Pre-set donation amounts in cents</ParamField>
+<ParamField body="description" type="string">Campaign description (supports markdown)</ParamField>
+<ParamField body="allowRecurring" type="boolean" default="true">Enable recurring donations</ParamField>
+
+## Response
+
+```json
+{
+  "id": "clx9876543210",
+  "title": "Annual Fund 2026",
+  "slug": "annual-fund-2026",
+  "type": "DONATION",
+  "status": "DRAFT",
+  "goalAmountCents": 5000000,
+  "suggestedAmounts": [2500, 5000, 10000, 25000],
+  "createdAt": "2026-02-28T12:00:00.000Z"
+}
+```

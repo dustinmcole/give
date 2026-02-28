@@ -1,0 +1,53 @@
+---
+title: List Donations
+api: GET /api/donations
+description: "List donations for an organization with pagination."
+---
+
+# List Donations
+
+Returns a paginated list of donations for an organization.
+
+## Query Parameters
+
+<ParamField query="orgId" type="string" required>
+  Organization ID to filter by
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number
+</ParamField>
+
+<ParamField query="limit" type="integer" default="50">
+  Items per page (max 100)
+</ParamField>
+
+## Response
+
+```json
+{
+  "donations": [
+    {
+      "id": "clx1111111111",
+      "amountCents": 5000,
+      "status": "SUCCEEDED",
+      "frequency": "ONE_TIME",
+      "createdAt": "2026-02-28T12:00:00.000Z",
+      "donor": {
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "email": "jane@example.com"
+      },
+      "campaign": {
+        "title": "Annual Fund 2026"
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 347,
+    "totalPages": 7
+  }
+}
+```

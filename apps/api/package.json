@@ -1,0 +1,25 @@
+{
+  "name": "@give/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@give/db": "workspace:*",
+    "@give/shared": "workspace:*",
+    "@hono/node-server": "^1",
+    "dotenv": "^16",
+    "hono": "^4",
+    "stripe": "^17",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

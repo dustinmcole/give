@@ -1,0 +1,72 @@
+---
+title: Quickstart
+description: "Get your first donation form live in under 5 minutes."
+---
+
+# Quickstart
+
+Follow these steps to start accepting donations with Give.
+
+## 1. Create Your Organization
+
+Sign up at [app.give.dev](https://app.give.dev/signup) with your nonprofit's details.
+
+<Steps>
+  <Step title="Enter your organization details">
+    Provide your nonprofit name, EIN (for 501(c)(3) verification), and contact information.
+  </Step>
+  <Step title="Connect your bank account">
+    Complete Stripe Connect onboarding to link your bank account for payouts. This takes about 2 minutes.
+  </Step>
+  <Step title="Choose your plan">
+    Start on the **Basic tier** (1% platform fee) or upgrade to **Pro** (2%) for advanced features.
+  </Step>
+</Steps>
+
+## 2. Create a Campaign
+
+From your dashboard, click **Create Campaign** and configure:
+
+- **Title** — Your campaign name (e.g., "Annual Fund 2026")
+- **Goal** — Optional fundraising target to display a progress thermometer
+- **Suggested amounts** — Pre-set donation amounts for donors to choose from
+- **Recurring options** — Enable monthly, quarterly, or annual giving
+
+## 3. Share Your Donation Form
+
+Every campaign gets a shareable donation page and an embeddable widget.
+
+### Hosted Page
+Share the link directly:
+```
+https://give.dev/donate/your-campaign-slug
+```
+
+### Embeddable Widget
+Drop this snippet into any website:
+```html
+<script src="https://cdn.give.dev/widget.js"></script>
+<div data-give-campaign="your-campaign-id"></div>
+```
+
+### QR Code
+Download a QR code from your campaign settings for print materials and events.
+
+## 4. Start Receiving Donations
+
+That's it. Donations flow through Stripe, fees are calculated transparently, and funds are automatically deposited to your bank on your chosen schedule (daily or weekly).
+
+<Info>
+  **Processing fees** (Stripe's 2.2% + $0.30 for cards, 0.8% capped at $5 for ACH) are separate from Give's platform fee. Donors can optionally cover all fees so your nonprofit receives 100% of the intended donation.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Donation Forms" icon="hand-holding-dollar" href="/guides/donation-forms">
+    Customize your forms with branding, custom fields, and suggested amounts.
+  </Card>
+  <Card title="Donor Management" icon="users" href="/guides/donor-management">
+    Track donors, segment your audience, and build relationships.
+  </Card>
+</CardGroup>

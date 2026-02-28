@@ -301,7 +301,40 @@ With donor fee coverage:
 
 ---
 
-## 12. Research Archive
+## 12. Documentation & Community
+
+### Documentation — Mintlify (DECIDED)
+**Platform:** Mintlify (mintlify.com)
+**Why:** Best-in-class design, native OpenAPI/API playground, MDX support, custom domain on free tier, LLM-ready indexing. Used by Anthropic, Cursor, Perplexity.
+**Cost:** Free tier to start → $250/mo Pro when team editing + analytics needed.
+**Location:** `docs/` directory in monorepo, deployed via Mintlify.
+
+**Doc structure:**
+- Getting Started (quickstart, onboarding guide)
+- Product Guides (campaigns, donation forms, donor management, events, P2P)
+- API Reference (auto-generated from OpenAPI spec)
+- Integrations (Stripe, Zapier, webhooks)
+- Billing & Pricing (transparent fee explanation)
+
+### Changelog / Roadmap / Feature Voting — Featurebase (DECIDED)
+**Platform:** Featurebase (featurebase.app)
+**Why:** All three features (changelog, public roadmap, feature voting) in one tool for $49/mo flat. AI duplicate detection. No usage-based pricing. Beats Canny ($359/mo) on value.
+**Integration:** Embed Featurebase widgets in the Give app + link from footer/nav.
+
+**Pages to integrate:**
+- `/changelog` — Product updates, new features, fixes
+- `/roadmap` — Public development pipeline (Planned → In Progress → Done)
+- `/feedback` — Feature request voting board where users comment and upvote
+
+**Alternatives considered and rejected:**
+- Canny ($359/mo for comparable features — too expensive for startup)
+- Frill ($75/mo for all features — thinner feature set)
+- Nolt ($29/mo — feedback only, no changelog/roadmap)
+- Build-it-yourself (3-4 weeks engineering, better spent on core product)
+
+---
+
+## 13. Research Archive
 
 Detailed competitive research was conducted on 2026-02-28 covering:
 - Givebutter (features, pricing, weaknesses, tech stack)
@@ -321,3 +354,10 @@ Full research notes available on request. Key sources indexed from Givebutter.co
 | Date | Update | Terminal/Session |
 |------|--------|-----------------|
 | 2026-02-28 | Initial planning document created. Competitive research complete. Feature prioritization drafted. | Initial session |
+| 2026-02-28 | Monorepo initialized (Turborepo + pnpm). Shared types/fee calc package created. Prisma schema designed (orgs, users, donors, donations, campaigns). | Initial session |
+| 2026-02-28 | Backend API complete: Hono server, 5 route groups (health, orgs, campaigns, donations, stripe), Stripe Connect integration, webhook handling, fee calculation. | Initial session |
+| 2026-02-28 | Documentation (Mintlify) and changelog/roadmap (Featurebase) platforms decided. Docs scaffolding started. | Initial session |
+| 2026-02-28 | Frontend scaffolding in progress: Next.js 15, landing page, donation form, dashboard, donor/campaign pages. | Initial session |
+| 2026-02-28 | Frontend COMPLETE: Landing page (hero, features, pricing, comparison table), donation page with fee calculator, dashboard (overview, campaigns, donors), DonationForm + GoalThermometer components, API client. | Initial session |
+| 2026-02-28 | Mintlify docs COMPLETE: 25 pages — intro, quickstart, pricing, 6 guides, 4 integration pages, 12 API reference pages. mint.json configured with full navigation. | Initial session |
+| 2026-02-28 | ALL packages type-check clean (zero TS errors across shared, db, api, web). Prisma client generated. Project ready for `pnpm dev`. | Initial session |

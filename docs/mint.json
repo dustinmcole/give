@@ -1,0 +1,125 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Give",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#2563eb",
+    "light": "#60a5fa",
+    "dark": "#1d4ed8",
+    "anchors": {
+      "from": "#2563eb",
+      "to": "#10b981"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Dashboard",
+      "url": "https://app.give.dev/dashboard"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Get Started",
+    "url": "https://app.give.dev/signup"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Changelog",
+      "icon": "list",
+      "url": "https://give.featurebase.app/changelog"
+    },
+    {
+      "name": "Roadmap",
+      "icon": "map",
+      "url": "https://give.featurebase.app/roadmap"
+    },
+    {
+      "name": "Feature Requests",
+      "icon": "lightbulb",
+      "url": "https://give.featurebase.app"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "introduction",
+        "quickstart",
+        "pricing"
+      ]
+    },
+    {
+      "group": "Guides",
+      "pages": [
+        "guides/donation-forms",
+        "guides/campaigns",
+        "guides/donor-management",
+        "guides/recurring-giving",
+        "guides/events",
+        "guides/peer-to-peer"
+      ]
+    },
+    {
+      "group": "Integrations",
+      "pages": [
+        "integrations/overview",
+        "integrations/stripe",
+        "integrations/zapier",
+        "integrations/webhooks"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/overview",
+        "api-reference/authentication"
+      ]
+    },
+    {
+      "group": "Organizations",
+      "pages": [
+        "api-reference/orgs/create",
+        "api-reference/orgs/get",
+        "api-reference/orgs/list-campaigns"
+      ]
+    },
+    {
+      "group": "Campaigns",
+      "pages": [
+        "api-reference/campaigns/create",
+        "api-reference/campaigns/get",
+        "api-reference/campaigns/update",
+        "api-reference/campaigns/public"
+      ]
+    },
+    {
+      "group": "Donations",
+      "pages": [
+        "api-reference/donations/create",
+        "api-reference/donations/get",
+        "api-reference/donations/list"
+      ]
+    },
+    {
+      "group": "Stripe Connect",
+      "pages": [
+        "api-reference/stripe/connect",
+        "api-reference/stripe/refresh",
+        "api-reference/stripe/webhooks"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/datawake/give",
+    "x": "https://x.com/givefundraising"
+  }
+}

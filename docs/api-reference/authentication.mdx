@@ -1,0 +1,39 @@
+---
+title: Authentication
+description: "How to authenticate with the Give API."
+---
+
+# Authentication
+
+All API requests must include your API key in the `Authorization` header.
+
+## API Keys
+
+Generate API keys from your organization dashboard: **Settings > API Keys**.
+
+There are two types of keys:
+
+| Key Type | Prefix | Use Case |
+|----------|--------|----------|
+| **Live** | `gv_live_` | Production — processes real donations |
+| **Test** | `gv_test_` | Development — uses Stripe test mode, no real charges |
+
+## Usage
+
+Include the key as a Bearer token:
+
+```bash
+curl -X GET https://api.give.dev/api/campaigns \
+  -H "Authorization: Bearer gv_test_abc123..."
+```
+
+## Security Best Practices
+
+<Warning>
+  **Never expose API keys in client-side code.** API keys should only be used in server-to-server requests. For client-side donation forms, use the publishable key and Stripe Elements instead.
+</Warning>
+
+- Store keys in environment variables, never in source code
+- Use test keys (`gv_test_`) during development
+- Rotate keys immediately if compromised
+- Use the minimum required scope for each integration

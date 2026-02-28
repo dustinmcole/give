@@ -1,0 +1,32 @@
+---
+title: Stripe
+description: "How Give uses Stripe Connect for payment processing."
+---
+
+# Stripe Integration
+
+Give uses Stripe Connect to process all payments. Each nonprofit gets their own Stripe Express account, giving them direct access to their funds while Give manages the platform experience.
+
+## How It Works
+
+1. **Onboarding** — When a nonprofit signs up, they complete Stripe's Express onboarding (identity verification, bank account linking). Takes ~2 minutes.
+2. **Donations** — When a donor gives, Give creates a PaymentIntent on the nonprofit's connected Stripe account.
+3. **Fees** — Stripe processing fees and Give's platform fee are automatically calculated and separated.
+4. **Payouts** — Funds are automatically deposited to the nonprofit's bank account on their chosen schedule (daily or weekly).
+
+## Nonprofit Rates
+
+Give qualifies for Stripe's nonprofit processing rates:
+
+| Method | Rate |
+|--------|------|
+| Credit/Debit | 2.2% + $0.30 |
+| ACH | 0.8% (capped at $5) |
+| Apple Pay / Google Pay | Same as card |
+
+## Dashboard
+
+Nonprofits can access their Stripe Express dashboard to view:
+- Individual transaction details
+- Payout history and schedule
+- Dispute/chargeback management

@@ -1,0 +1,79 @@
+---
+title: API Overview
+description: "Full REST API for building custom integrations with Give."
+---
+
+# API Overview
+
+Give provides a full REST API that powers everything — our own frontend is built on it. Every feature available in the dashboard is accessible via the API.
+
+## Base URL
+
+```
+https://api.give.dev/api
+```
+
+For local development:
+```
+http://localhost:3001/api
+```
+
+## Authentication
+
+All API requests require authentication via an API key passed in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer gv_live_..." \
+  https://api.give.dev/api/orgs/your-org-id
+```
+
+API keys are scoped to an organization and can be created from your dashboard under **Settings > API Keys**.
+
+## Response Format
+
+All responses are JSON. Successful responses return the resource directly:
+
+```json
+{
+  "id": "clx1234567890",
+  "name": "My Campaign",
+  "status": "ACTIVE"
+}
+```
+
+Errors return a consistent error object:
+
+```json
+{
+  "error": "Campaign not found",
+  "status": 404
+}
+```
+
+## Pagination
+
+List endpoints support cursor-based pagination:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | integer | 1 | Page number |
+| `limit` | integer | 50 | Items per page (max 100) |
+
+## Rate Limits
+
+| Plan | Rate Limit |
+|------|-----------|
+| Basic | 100 requests/minute |
+| Pro | 1,000 requests/minute |
+
+## Webhooks
+
+Give sends real-time webhook events for key actions (donations, payout events, campaign updates). See the [Webhooks guide](/integrations/webhooks) for setup details.
+
+## SDKs
+
+Official SDKs are coming soon:
+- JavaScript/TypeScript (npm)
+- Python (pip)
+
+In the meantime, use any HTTP client — the API is straightforward REST.

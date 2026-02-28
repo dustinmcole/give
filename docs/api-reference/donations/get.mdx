@@ -1,0 +1,49 @@
+---
+title: Get Donation
+api: GET /api/donations/{id}
+description: "Retrieve a donation by ID."
+---
+
+# Get Donation
+
+Returns full details of a donation including donor, campaign, and organization information.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  Donation ID (CUID)
+</ParamField>
+
+## Response
+
+```json
+{
+  "id": "clx1111111111",
+  "amountCents": 5000,
+  "currency": "usd",
+  "status": "SUCCEEDED",
+  "frequency": "ONE_TIME",
+  "processingFeeCents": 140,
+  "platformFeeCents": 50,
+  "netAmountCents": 4810,
+  "coverFees": false,
+  "totalChargedCents": 5000,
+  "paymentMethod": "CARD",
+  "receiptNumber": "GV-2026-000001",
+  "createdAt": "2026-02-28T12:00:00.000Z",
+  "donor": {
+    "id": "clx2222222222",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane@example.com"
+  },
+  "campaign": {
+    "id": "clx9876543210",
+    "title": "Annual Fund 2026"
+  },
+  "org": {
+    "id": "clx1234567890",
+    "name": "Habitat for Humanity"
+  }
+}
+```

@@ -1,0 +1,39 @@
+---
+title: Get Public Campaign
+api: GET /api/campaigns/{id}/public
+description: "Public campaign data for donation pages — no authentication required."
+---
+
+# Get Public Campaign
+
+Returns public-facing campaign data optimized for donation pages. Does not require authentication. Excludes draft campaigns.
+
+Includes a recent donor roll that respects anonymity settings (anonymous donors show as "Anonymous", others show first name and last initial).
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>Campaign ID</ParamField>
+
+## Response
+
+```json
+{
+  "id": "clx9876543210",
+  "title": "Annual Fund 2026",
+  "description": "Help us build homes for families in need.",
+  "goalAmountCents": 5000000,
+  "raisedAmountCents": 1250000,
+  "donationCount": 347,
+  "coverImageUrl": "https://...",
+  "suggestedAmounts": [2500, 5000, 10000, 25000],
+  "allowRecurring": true,
+  "org": {
+    "name": "Habitat for Humanity",
+    "logoUrl": "https://..."
+  },
+  "recentDonors": [
+    { "name": "Jane S.", "amountCents": 5000, "createdAt": "2026-02-28T12:00:00.000Z" },
+    { "name": "Anonymous", "amountCents": 10000, "createdAt": "2026-02-27T15:30:00.000Z" }
+  ]
+}
+```

@@ -1,0 +1,21 @@
+---
+title: Refresh Onboarding Link
+api: GET /api/stripe/connect/refresh/{orgId}
+description: "Generate a fresh Stripe onboarding link for an organization."
+---
+
+# Refresh Onboarding Link
+
+Stripe onboarding links expire after a short period. Use this endpoint to generate a fresh link.
+
+## Path Parameters
+
+<ParamField path="orgId" type="string" required>Organization ID</ParamField>
+
+## Response
+
+```json
+{
+  "onboardingUrl": "https://connect.stripe.com/setup/e/..."
+}
+```

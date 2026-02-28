@@ -1,0 +1,27 @@
+---
+title: Update Campaign
+api: PATCH /api/campaigns/{id}
+description: "Update campaign fields."
+---
+
+# Update Campaign
+
+Partially update a campaign. All fields are optional.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>Campaign ID</ParamField>
+
+## Request Body
+
+All fields optional. Only provided fields are updated.
+
+<ParamField body="title" type="string">Campaign title</ParamField>
+<ParamField body="slug" type="string">URL slug (must be unique within org)</ParamField>
+<ParamField body="status" type="string">One of: `draft`, `active`, `paused`, `ended`</ParamField>
+<ParamField body="goalAmountCents" type="integer">Goal in cents</ParamField>
+<ParamField body="description" type="string">Description</ParamField>
+
+## Response
+
+Returns the updated campaign object.

@@ -1,0 +1,33 @@
+---
+title: List Organization Campaigns
+api: GET /api/orgs/{idOrSlug}/campaigns
+description: "List all campaigns for an organization."
+---
+
+# List Organization Campaigns
+
+Returns all campaigns belonging to an organization. Accepts either an organization ID or slug.
+
+## Path Parameters
+
+<ParamField path="idOrSlug" type="string" required>
+  Organization ID (CUID) or URL slug
+</ParamField>
+
+## Response
+
+```json
+[
+  {
+    "id": "clx9876543210",
+    "title": "Annual Fund 2026",
+    "slug": "annual-fund-2026",
+    "type": "DONATION",
+    "status": "ACTIVE",
+    "goalAmountCents": 5000000,
+    "raisedAmountCents": 1250000,
+    "donationCount": 347,
+    "createdAt": "2026-02-28T12:00:00.000Z"
+  }
+]
+```

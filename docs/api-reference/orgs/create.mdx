@@ -1,0 +1,65 @@
+---
+title: Create Organization
+api: POST /api/orgs
+description: "Create a new organization and initiate Stripe Connect onboarding."
+---
+
+# Create Organization
+
+Creates a new organization on Give and sets up a Stripe Connect Express account for payment processing.
+
+## Request Body
+
+<ParamField body="name" type="string" required>
+  Organization name (e.g., "Habitat for Humanity")
+</ParamField>
+
+<ParamField body="slug" type="string" required>
+  URL-friendly identifier. Lowercase letters, numbers, and hyphens only.
+</ParamField>
+
+<ParamField body="ein" type="string">
+  IRS Employer Identification Number in XX-XXXXXXX format. Required for 501(c)(3) verification.
+</ParamField>
+
+<ParamField body="website" type="string">
+  Organization website URL.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Contact email for Stripe Connect onboarding.
+</ParamField>
+
+## Response
+
+Returns the created organization with a Stripe onboarding URL.
+
+```json
+{
+  "org": {
+    "id": "clx1234567890",
+    "name": "Habitat for Humanity",
+    "slug": "habitat-for-humanity",
+    "ein": "91-1234567",
+    "status": "ONBOARDING",
+    "planTier": "BASIC",
+    "stripeAccountId": "acct_1234567890",
+    "createdAt": "2026-02-28T12:00:00.000Z"
+  },
+  "onboardingUrl": "https://connect.stripe.com/setup/e/..."
+}
+```
+
+## Example
+
+```bash
+curl -X POST https://api.give.dev/api/orgs \
+  -H "Authorization: Bearer gv_test_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Habitat for Humanity",
+    "slug": "habitat-for-humanity",
+    "ein": "91-1234567",
+    "email": "admin@habitat.org"
+  }'
+```

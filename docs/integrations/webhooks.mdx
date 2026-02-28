@@ -1,0 +1,58 @@
+---
+title: Webhooks
+description: "Receive real-time events from Give."
+---
+
+# Webhooks
+
+Webhooks let your application receive real-time HTTP notifications when events happen in Give. Use them to build custom integrations, sync data, or trigger workflows.
+
+## Setup
+
+1. Go to **Dashboard > Settings > Webhooks**
+2. Enter your endpoint URL (must be HTTPS)
+3. Select which events to subscribe to
+4. Save — Give will send a test event to verify your endpoint
+
+## Events
+
+| Event | Description |
+|-------|-------------|
+| `donation.created` | A new donation was initiated |
+| `donation.succeeded` | A donation payment was completed |
+| `donation.failed` | A donation payment failed |
+| `donation.refunded` | A donation was refunded |
+| `donor.created` | A new donor record was created |
+| `campaign.created` | A new campaign was created |
+| `campaign.updated` | A campaign was updated |
+
+## Payload Format
+
+```json
+{
+  "event": "donation.succeeded",
+  "timestamp": "2026-02-28T12:00:00.000Z",
+  "data": {
+    "id": "clx1111111111",
+    "amountCents": 5000,
+    "donorId": "clx2222222222",
+    "campaignId": "clx9876543210",
+    "orgId": "clx1234567890"
+  }
+}
+```
+
+## Verification
+
+All webhook payloads include an `X-Give-Signature` header. Verify this signature using your webhook secret to ensure the request came from Give and wasn't tampered with.
+
+## Retry Policy
+
+If your endpoint returns a non-2xx status code, Give retries with exponential backoff:
+- Retry 1: 1 minute
+- Retry 2: 5 minutes
+- Retry 3: 30 minutes
+- Retry 4: 2 hours
+- Retry 5: 12 hours
+
+After 5 failed attempts, the webhook is marked as failed and visible in your dashboard.

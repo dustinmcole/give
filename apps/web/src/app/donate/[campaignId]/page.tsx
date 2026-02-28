@@ -1,0 +1,124 @@
+import { getDonationCampaign } from "@/lib/api";
+import GoalThermometer from "@/components/GoalThermometer";
+import DonationForm from "@/components/DonationForm";
+import Link from "next/link";
+
+interface DonatePageProps {
+  params: Promise<{ campaignId: string }>;
+}
+
+async function fetchCampaign(campaignId: string) {
+  try {
+    return await getDonationCampaign(campaignId);
+  } catch {
+    return null;
+  }
+}
+
+export default async function DonatePage({ params }: DonatePageProps) {
+  const { campaignId } = await params;
+  const campaign = await fetchCampaign(campaignId);
+
+  if (!campaign) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Campaign not found
+          </h1>
+          <p className="text-gray-500 mb-6">
+            This campaign may have ended or the link may be incorrect.
+          </p>
+          <Link
+            href="/"
+            className="text-give-primary font-medium hover:underline"
+          >
+            Return home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const donationCountLabel =
+    campaign.donationCount === 1
+      ? "1 donation"
+      : `${campaign.donationCount.toLocaleString()} donations`;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* ── Header ─────────────────────────────────────── */}
+      <header className="bg-white border-b border-gray-100">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link
+            href="/"
+            className="text-xl font-bold text-give-primary tracking-tight"
+          >
+            Give
+          </Link>
+          <div className="text-sm text-gray-400">Secure donation</div>
+        </div>
+      </header>
+
+      {/* ── Main ───────────────────────────────────────── */}
+      <main className="max-w-5xl mx-auto px-6 py-12">
+        <div className="grid lg:grid-cols-5 gap-12">
+          {/* ── Campaign Info (left) ─────────────────── */}
+          <div className="lg:col-span-3 space-y-8">
+            {campaign.coverImageUrl && (
+              <div className="aspect-video bg-gray-200 rounded-2xl overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={campaign.coverImageUrl}
+                  alt={campaign.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 leading-tight">
+                {campaign.title}
+              </h1>
+              <p className="mt-1 text-sm text-gray-400">{donationCountLabel}</p>
+            </div>
+
+            <GoalThermometer
+              raisedCents={campaign.raisedCents}
+              goalCents={campaign.goalCents}
+            />
+
+            <div className="prose prose-gray max-w-none">
+              <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">
+                {campaign.description}
+              </p>
+            </div>
+          </div>
+
+          {/* ── Donation Form (right) ────────────────── */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sticky top-24">
+              <h2 className="text-lg font-semibold text-gray-900 mb-6">
+                Make a donation
+              </h2>
+              <DonationForm campaignId={campaignId} />
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* ── Footer ─────────────────────────────────────── */}
+      <footer className="border-t border-gray-100 py-8 mt-16">
+        <div className="max-w-5xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
+          <span>
+            Powered by{" "}
+            <Link href="/" className="text-give-primary font-medium hover:underline">
+              Give
+            </Link>
+          </span>
+          <span>Fundraising that&apos;s fair.</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
