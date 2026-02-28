@@ -6,6 +6,8 @@ import {
   createConnectAccount,
   createAccountLink,
 } from "../lib/stripe.js";
+import { resend, fromEmail } from "../lib/email.js";
+import { generateDonationReceiptHtml } from "../emails/donation-receipt.js";
 import type Stripe from "stripe";
 
 export const stripeRoutes = new Hono();
@@ -203,6 +205,10 @@ async function handlePaymentIntentSucceeded(
       status: "SUCCEEDED",
       stripePaymentIntentId: paymentIntent.id,
     },
+    include: {
+      donor: true,
+      org: true,
+    }
   });
 
   // Update donor aggregates
@@ -225,10 +231,58 @@ async function handlePaymentIntentSucceeded(
     },
   });
 
-  // Queue receipt email (placeholder — will integrate with email service)
-  console.log(
-    `TODO: Queue receipt email for donation ${donationId} to donor ${donation.donorId}`
-  );
+  // Queue receipt email
+  try {
+    // Generate a receipt number
+    const year = donation.createdAt.getFullYear();
+    const donationCount = await prisma.donation.count({
+      where: {
+        orgId: donation.orgId,
+        createdAt: {
+          gte: new Date(year, 0, 1),
+          lt: new Date(year + 1, 0, 1)
+        }
+      }
+    });
+    
+    const sequentialNumber = String(donationCount).padStart(6, '0');
+    const receiptNumber = \`GIVE-\${year}-\${sequentialNumber}\`;
+
+    if (resend) {
+      const html = generateDonationReceiptHtml({
+        orgName: donation.org.name,
+        orgEin: donation.org.ein,
+        donorName: \`\${donation.donor.firstName} \${donation.donor.lastName}\`.trim(),
+        amountCents: donation.totalChargedCents > 0 ? donation.totalChargedCents : donation.amountCents,
+        date: donation.createdAt,
+        receiptNumber,
+      });
+
+      await resend.emails.send({
+        from: fromEmail,
+        to: donation.donor.email,
+        subject: \`Your tax receipt from \${donation.org.name}\`,
+        html,
+      });
+      
+      console.log(\`Receipt \${receiptNumber} sent to \${donation.donor.email}\`);
+    } else {
+      console.warn("RESEND_API_KEY not configured, skipping receipt email");
+    }
+
+    // Update donation record with receipt info
+    await prisma.donation.update({
+      where: { id: donation.id },
+      data: {
+        receiptSentAt: new Date(),
+        receiptNumber,
+      },
+    });
+
+  } catch (err) {
+    console.error("Error sending receipt email:", err);
+    // Continue execution so webhook responds with 200
+  }
 }
 
 async function handlePaymentIntentFailed(
@@ -249,7 +303,7 @@ async function handlePaymentIntentFailed(
   });
 
   console.log(
-    `Donation ${donationId} payment failed. Reason: ${paymentIntent.last_payment_error?.message ?? "unknown"}`
+    \`Donation \${donationId} payment failed. Reason: \${paymentIntent.last_payment_error?.message ?? "unknown"}\`
   );
 }
 
@@ -288,7 +342,7 @@ async function handleAccountUpdated(account: Stripe.Account) {
   });
 
   console.log(
-    `Organization ${org.id} (${org.name}) Stripe status updated. Onboarded: ${isOnboarded}`
+    \`Organization \${org.id} (\${org.name}) Stripe status updated. Onboarded: \${isOnboarded}\`
   );
 }
 
