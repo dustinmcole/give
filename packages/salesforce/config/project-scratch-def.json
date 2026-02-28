@@ -1,0 +1,10 @@
+{
+  "orgName": "Give Salesforce Scratch Org",
+  "edition": "Developer",
+  "features": ["ContactsToMultipleAccounts", "PersonAccounts"],
+  "settings": {
+    "orgPreferenceSettings": {
+      "s1DesktopEnabled": true
+    }
+  }
+}
