@@ -1,7 +1,7 @@
 # Give — Master Planning Document
 
 > **Last updated:** 2026-02-28
-> **Status:** Research & Planning Phase
+> **Status:** Research & Planning Phase — MVP scope refined
 > **Owner:** Dustin Cole / Datawake
 
 ---
@@ -72,60 +72,91 @@
 
 ## 4. Feature Prioritization
 
-### Tier 1 — MVP (Launch Requirements)
-These are table stakes. Cannot launch without them.
+### MVP Philosophy
+The old Tier 1 list had 12 P0 features — that's a complete v1, not an MVP. The refined approach: ship the minimum that gets the first nonprofit live and processing donations, plus one killer differentiator (Salesforce integration) that no competitor at our price point offers.
+
+### MVP — Must Ship (Launch Blockers)
+These 8 features are the product. Cannot go live without every one of them.
+
+| # | Feature | Notes |
+|---|---------|-------|
+| 1 | **Donation forms** | One-time + recurring. Hosted page (`give.to/org-name`). Mobile-optimized. 2-3 polished templates with color/logo customization — no drag-and-drop builder yet. |
+| 2 | **Payment processing (Stripe Connect)** | Cards, ACH, Apple Pay, Google Pay. Express accounts for fast nonprofit onboarding. This is the entire business. |
+| 3 | **Automatic payouts** | Daily/weekly direct to bank. Day 1 differentiator vs Givebutter's manual withdrawals. Stripe handles the heavy lifting. |
+| 4 | **Cover-the-fee checkbox** | Donors optionally cover 1% platform + processing fees. Critical for adoption pitch: "your donors can make it free for you." |
+| 5 | **Automated tax receipts** | Email receipt with org name, EIN, date, amount, IRS-compliant substantiation language. Template-based, not customizable yet. |
+| 6 | **Nonprofit onboarding** | Self-service signup → Stripe Connect Express flow → basic org profile (name, EIN, logo, mission). Skip manual 501(c)(3) verification — let Stripe's KYC handle it for MVP. |
+| 7 | **Org dashboard** | Donation list, total raised, recent activity, payout status. One page with a table and summary stats. Not fancy — functional. |
+| 8 | **Salesforce integration** | Native AppExchange managed package. Bi-directional sync for both NPSP and Nonprofit Cloud (Agentforce Nonprofit). This is our Round 1 killer differentiator — see Section 8 for full strategy. |
+
+### MVP User Flow (end to end)
+```
+Nonprofit signs up → Connects Stripe → Customizes form (colors/logo) → Gets hosted URL
+   ↓
+Donor visits URL → Picks amount → One-time or recurring → Optionally covers fees → Pays
+   ↓
+Donor gets tax receipt email → Nonprofit sees it on dashboard → Money hits their bank automatically
+   ↓
+(If Salesforce connected) → Donor + donation sync to Salesforce in real time
+```
+
+### MVP Engineering Scope
+| Piece | Scope |
+|-------|-------|
+| **Pages** | Landing/marketing, signup, onboarding wizard, org dashboard, donation form (public), receipt email template |
+| **API endpoints** | ~15-20 (auth, org CRUD, form config, Stripe Connect, webhooks, donations list, payout status) |
+| **Stripe integration** | Connect Express onboarding, PaymentIntents, Subscriptions (recurring), webhooks, application_fee_amount for 1% |
+| **Salesforce package** | Managed package with NPSP + NPC adapters, OAuth Connected App, field mapping UI, real-time sync via platform events |
+| **Database tables** | ~8-10 (organizations, users, donation_forms, donations, payouts, receipts, sf_connections, sf_sync_log) |
+
+### Deferred from MVP (feels P0 but isn't)
+
+| Feature | Why It Can Wait |
+|---------|----------------|
+| **Donor CRM** | CSV export of donors + giving history is enough at launch. Nonprofits with Salesforce already have a CRM. Full built-in CRM is Round 1 fast-follow. |
+| **Campaign/fundraising pages** | The donation form IS the campaign for now. Goal thermometers and donor rolls are Round 1. |
+| **Recurring giving management portal** | Stripe's customer portal handles update/cancel. Custom donor portal comes later. |
+| **Reporting & analytics** | Dashboard summary stats + CSV export covers it. Real reporting is Round 1. |
+| **Multi-user access** | Single admin per org for MVP. Add roles/permissions when orgs ask for it. |
+
+### Round 1 — Fast Follow (Weeks After MVP)
+Ship these within weeks of launch based on early user feedback signals.
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| **Customizable donation forms** | P0 | One-time + recurring (monthly, quarterly, annual). Embeddable widget + hosted page. Mobile-optimized. |
-| **Payment processing** | P0 | Credit/debit, ACH, Apple Pay, Google Pay via Stripe Connect |
-| **Donor management (basic CRM)** | P0 | Contact profiles, giving history, tags/segments, search, export |
-| **Automated tax receipts** | P0 | Customizable email receipts with org branding. IRS-compliant substantiation. |
-| **Campaign/fundraising pages** | P0 | Branded pages with goal thermometer, donor roll, social sharing, QR codes |
-| **Recurring giving management** | P0 | Donor portal to manage/update/cancel recurring gifts. Retry failed payments. |
-| **Basic reporting & analytics** | P0 | Donation totals, trends, campaign performance, donor retention rates |
-| **Nonprofit onboarding** | P0 | Self-service signup, Stripe Connect setup, 501(c)(3) verification |
-| **Org dashboard** | P0 | Central hub for all campaigns, donors, finances |
-| **Multi-user access** | P0 | Role-based permissions (admin, editor, viewer) |
-| **Cover-the-fee option** | P0 | Let donors optionally cover processing + platform fees |
-| **Payouts/disbursements** | P0 | Automatic daily/weekly payouts to nonprofit bank account (no manual withdrawal) — this is a Givebutter weakness |
-
-### Tier 2 — Fast Follow (Weeks After Launch)
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| **Peer-to-peer fundraising** | P1 | Supporter-created pages, team pages, leaderboards |
-| **Event ticketing** | P1 | Ticket tiers, check-in, virtual event support |
-| **Email campaigns** | P1 | Basic newsletters, donor communications, templates |
-| **Text-to-donate** | P1 | SMS short code → donation form link |
-| **Embeddable widgets** | P1 | Drop-in donation forms for any website (WordPress, Squarespace, etc.) |
+| **Donor management (basic CRM)** | P1 | Contact profiles, giving history, tags/segments, search, export. For orgs that don't use Salesforce. |
+| **Campaign/fundraising pages** | P1 | Branded pages with goal thermometer, donor roll, social sharing, QR codes |
+| **Basic reporting & analytics** | P1 | Donation totals, trends, campaign performance, donor retention rates |
+| **Recurring giving management** | P1 | Donor portal to manage/update/cancel recurring gifts. Retry failed payments. |
+| **Multi-user access** | P1 | Role-based permissions (admin, editor, viewer) |
 | **Data import/migration** | P1 | CSV import + migration tools from Givebutter, Zeffy, Donorbox, etc. |
+| **Embeddable widgets** | P1 | Drop-in donation forms for any website (WordPress, Squarespace, etc.) |
 | **Zapier integration** | P1 | Connect to 6,000+ apps as a bridge until native integrations exist |
 
-### Tier 3 — Growth Features (Pro Tier)
+### Round 2 — Growth Features
 | Feature | Priority | Notes |
 |---------|----------|-------|
+| **Peer-to-peer fundraising** | P2 | Supporter-created pages, team pages, leaderboards |
+| **Event ticketing** | P2 | Ticket tiers, check-in, virtual event support |
+| **Email campaigns** | P2 | Basic newsletters, donor communications, templates |
+| **Text-to-donate** | P2 | SMS short code → donation form link |
 | **Auctions** | P2 | Silent auction, mobile bidding, auto-payment |
 | **Advanced automation/workflows** | P2 | Drip sequences, triggered emails, donor journey automation |
 | **AI-powered donor insights** | P2 | Prospect scoring, churn prediction, suggested actions |
-| **Native integrations** | P2 | Salesforce, Mailchimp, QuickBooks, HubSpot — native, not just Zapier |
+| **Native integrations** | P2 | Mailchimp, QuickBooks, HubSpot — native, not just Zapier |
 | **Advanced reporting** | P2 | Custom reports, donor segmentation, cohort analysis |
 | **Memberships** | P2 | Tiered membership programs with auto-renewal |
-| **Online store** | P2 | Merch/product sales with inventory management |
-| **Raffles & lotteries** | P2 | Ticket bundles, drawing management |
 | **Custom domains** | P2 | White-label donation pages on the nonprofit's domain |
-| **Direct mail** | P2 | Physical letter campaigns from within the platform |
-| **Multi-currency / international** | P2 | For nonprofits with global donor bases |
 
-### Tier 4 — Long-Term Differentiators
+### Round 3 — Long-Term Differentiators
 | Feature | Priority | Notes |
 |---------|----------|-------|
 | **Embedded giving (on-site conversion)** | P3 | Donate without leaving the nonprofit's site — 28% revenue lift per Fundraise Up |
 | **AI virtual engagement officer** | P3 | AI-driven personalized donor outreach at scale |
 | **Volunteer management** | P3 | Track volunteers alongside donors (gap across all competitors) |
 | **Grant management** | P3 | Track grant applications, deadlines, reporting (no competitor does this well) |
-| **Advocacy tools** | P3 | Petition, letter campaigns, combined with fundraising |
-| **Planned giving / legacy** | P3 | Bequests, estate gifts |
-| **Crypto / stock donations** | P3 | Alternative asset acceptance |
+| **Online store** | P3 | Merch/product sales with inventory management |
+| **Multi-currency / international** | P3 | For nonprofits with global donor bases |
 | **Native mobile app** | P3 | Admin app for nonprofit staff |
 
 ---
@@ -135,18 +166,20 @@ These are table stakes. Cannot launch without them.
 ### Day 1 Advantages
 1. **Transparent pricing** — No donor tips, no hidden fees, no gotchas. 1% is 1%.
 2. **Automatic payouts** — Daily/weekly bank deposits without manual withdrawal (Givebutter requires manual initiation).
-3. **Modern UX** — Clean, fast, beautiful. Not enterprise-clunky.
-4. **ACH promotion** — Actively encourage ACH donations (0.8% vs 2.2% card fees) to save nonprofits money.
+3. **Native Salesforce integration** — AppExchange-listed, both NPSP and NPC, built by a Salesforce expert. Givebutter has zero native Salesforce support. GoFundMe Pro charges $250/mo for theirs. Ours is included.
+4. **Modern UX** — Clean, fast, beautiful. Not enterprise-clunky.
+5. **ACH promotion** — Actively encourage ACH donations (0.8% vs 2.2% card fees) to save nonprofits money.
 
 ### Medium-Term Advantages
-5. **Native API from day one** — Public REST API + webhooks. Zeffy has no API. Givebutter relies on Zapier.
-6. **Seamless migration** — One-click data import from competitors. Make switching painless.
-7. **Developer-friendly** — Embeddable components, API-first design, webhook events.
+6. **Native API from day one** — Public REST API + webhooks. Zeffy has no API. Givebutter relies on Zapier.
+7. **Seamless migration** — One-click data import from competitors. Make switching painless.
+8. **Developer-friendly** — Embeddable components, API-first design, webhook events.
 
 ### Long-Term Moats
-8. **AI-native platform** — Built with AI from the ground up, not bolted on.
-9. **Unified data model** — Donors, volunteers, events, campaigns, grants all connected.
-10. **Community/ecosystem** — Template marketplace, integration directory, nonprofit community.
+9. **AI-native platform** — Built with AI from the ground up, not bolted on.
+10. **Unified data model** — Donors, volunteers, events, campaigns, grants all connected.
+11. **Salesforce ecosystem depth** — Deepest integration in the market. Custom Flows, custom objects, bi-directional sync, real-time events. The integration nonprofits wish Blackbaud had.
+12. **Community/ecosystem** — Template marketplace, integration directory, nonprofit community.
 
 ---
 
