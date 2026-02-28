@@ -9,12 +9,3 @@ dist/
 .DS_Store
 coverage/
 .vercel
-
-# OpenClaw agent workspace files
-SOUL.md
-AGENTS.md
-USER.md
-IDENTITY.md
-HEARTBEAT.md
-TOOLS.md
-skills/
