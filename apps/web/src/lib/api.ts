@@ -65,6 +65,7 @@ export interface Donation {
 export interface CreateDonationResponse {
   id: string;
   clientSecret: string;
+  stripeAccountId?: string;
 }
 
 export function createDonation(
