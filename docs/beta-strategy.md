@@ -65,7 +65,7 @@ Dustin Cole
 Founder, Give
 [phone] | [calendly link]
 
-*P.S. — If you're curious about the full vision, I'm building Give as a modern alternative to the entire Givebutter/Zeffy/Classy stack: donation forms, campaigns, peer-to-peer, events, CRM, and the deepest Salesforce integration in the market. All at 1%. Beta partners help shape what gets built first.*
+*P.S. — If you're curious about the full vision, I'm building Give as a modern alternative to Givebutter and Zeffy: beautiful donation forms, recurring giving, automatic payouts, and the deepest Salesforce integration in the market — all at 1%. Features like campaigns, P2P fundraising, and a built-in CRM are on the near-term roadmap, and beta partners help shape what gets built first.*
 
 ---
 
@@ -91,6 +91,25 @@ Short-form pitch for Reddit, Slack communities, LinkedIn, and Facebook groups. A
 > What I need from beta partners: process real donations through the platform, give honest feedback, and do a couple of 30-minute calls.
 >
 > Happy to answer questions about the platform, pricing model, or anything else. Not trying to sell — genuinely want feedback from people who live this every day.
+>
+> [Link to beta signup page]
+
+### Facebook Group version (warm, peer-to-peer)
+
+> Hey everyone — I'm building something and genuinely need your help.
+>
+> I've been working with nonprofits for years (Salesforce consulting + web) and I keep running into the same frustration: the "free" fundraising platforms that push donors into a 15-17% tip most people don't understand. It erodes donor trust, and it's not honest.
+>
+> So I built Give — a fundraising platform that charges nonprofits a flat 1% and leaves donors completely alone. No tip prompts. No confusion. Donors know exactly where their money goes.
+>
+> We're opening a small private beta (15-20 orgs) and I'm looking for nonprofits who:
+> - Are currently on Givebutter, Zeffy, Donorbox, or Give Lively
+> - Process at least some online donations
+> - Would be willing to try Give for one campaign and give honest feedback
+>
+> Beta is free — $0 platform fees the whole time. 1% rate locked in permanently afterward.
+>
+> Not a sales pitch. I just want real feedback from real nonprofit people. DM me or comment below if you're curious.
 >
 > [Link to beta signup page]
 
@@ -143,14 +162,24 @@ Short-form pitch for Reddit, Slack communities, LinkedIn, and Facebook groups. A
 
 ### Composition of the beta cohort (target 15-20 orgs):
 
+These two dimensions overlap — the same org appears in both. They're different lenses on the same cohort.
+
+**By Salesforce usage:**
+
 | Segment | Count | Purpose |
 |---------|-------|---------|
 | Salesforce orgs (NPSP) | 3-4 | Validate Salesforce NPSP integration |
 | Salesforce orgs (Nonprofit Cloud) | 1-2 | Validate NPC integration |
 | Non-Salesforce orgs | 8-10 | Validate core platform without SF dependency |
-| Currently on Zeffy | 3-4 | Direct competitive switch stories |
-| Currently on Givebutter | 3-4 | Direct competitive switch stories |
+
+**By current platform (competitive mix):**
+
+| Segment | Count | Purpose |
+|---------|-------|---------|
+| Currently on Zeffy | 3-4 | Direct competitive switch stories; tip-complaint pain is acute |
+| Currently on Givebutter | 3-4 | Direct competitive switch stories; manual payout frustration |
 | Currently on other (Donorbox, Give Lively, etc.) | 2-3 | Broader competitive validation |
+| Never used a dedicated platform (spreadsheets/Venmo) | 1-2 | Greenfield onboarding validation |
 
 ---
 
@@ -199,8 +228,8 @@ These are the highest-density, highest-trust channels for reaching our exact buy
 
 | Conference | When | Where | Attendees | Why |
 |------------|------|-------|-----------|-----|
-| **Nonprofit Technology Conference (NTC)** | March 10-13, 2026 | Detroit + Virtual | 5,000+ | **The single most important conference.** Every nonprofit tech buyer attends. Sponsor/exhibit if budget allows. |
-| **AFP ICON** | April 26-28, 2026 | San Diego | 3,000+ | Premier fundraising conference. The people who choose donation platforms. |
+| **Nonprofit Technology Conference (NTC)** | March 10-13, 2026 | Detroit + Virtual | 5,000+ | The most important nonprofit tech conference. Too soon to sponsor for 2026 (10 days out as of planning) — attend virtually, monitor hashtag (#26NTC), and target the 2027 event for sponsorship. |
+| **AFP ICON** | April 26-28, 2026 | San Diego | 3,000+ | Premier fundraising conference. First realistic conference target for in-person presence — register ASAP. |
 | **bbcon** | Sept 29 - Oct 1, 2026 | Columbus, OH | 3,000+ | Blackbaud's conference — attendees are current Blackbaud customers, many dissatisfied. Prime poaching ground. |
 | **Classy Collaborative** | May 6-7, 2026 | Chicago | 600+ | GoFundMe/Classy's conference. Attendees actively evaluating fundraising platforms. |
 | **Bridge Conference** | July 29-31, 2026 | Washington, DC | 1,500+ | Integrated marketing and fundraising with strong tech track. |
@@ -236,7 +265,7 @@ Key groups for awareness:
 ## 5. Beta Signup Landing Page Spec
 
 ### URL
-`give.to/beta` (or `givefundraising.com/beta` — depending on domain)
+`[domain TBD]/beta` — domain and brand name are still open questions (see PLAN.md §11). Update this once domain is confirmed. Examples in this spec use `give.to` as a placeholder.
 
 ### Page structure
 
@@ -264,7 +293,7 @@ Key groups for awareness:
 │  │  "Free" fundraising platforms aren't free.  │    │
 │  │                                             │    │
 │  │  Zeffy: 15-17% default donor tip            │    │
-│  │  Givebutter: 15% default tip or 3% fee     │    │
+│  │  Givebutter: 15-17% default tip or 3% fee  │    │
 │  │  Classy: $299/mo + 2.2%                    │    │
 │  │  Donorbox: 2.95% platform fee              │    │
 │  │                                             │    │
@@ -335,7 +364,18 @@ Key groups for awareness:
 2. Dustin reviews within 24 hours
 3. If good fit → personal email within 48 hours with Calendly link for onboarding call
 4. If not ideal fit → waitlist email with honest explanation of current beta scope
-5. Onboarding call (30 min) → set up Stripe Connect → configure first donation form → go live
+5. Onboarding call (30 min) → sign beta agreement (see below) → set up Stripe Connect → configure first donation form → go live
+
+### Beta agreement (required before going live)
+
+The locked-in pricing promise and data handling terms need to be in writing. A simple one-pager covering:
+- **Pricing lock:** 1% Basic tier rate guaranteed for the life of the account, regardless of future price changes
+- **Data handling:** Org donation data is confidential; we'll never share or sell it
+- **Feedback expectations:** Two 30-min calls, post-30-day survey, optional testimonial (with approval rights)
+- **Beta duration:** Defined end date (or "until public launch, whichever comes first")
+- **Liability:** Beta software — no SLA, best-effort uptime, no financial liability for downtime
+
+This doesn't need to be a lawyer-drafted agreement for the beta, but having something written protects both sides and sets professional expectations.
 
 ---
 
@@ -358,13 +398,15 @@ Key groups for awareness:
 | Metric | Target | Why |
 |--------|--------|-----|
 | Beta orgs onboarded | 15-20 | Enough data to validate, small enough to support personally |
-| Total donations processed | $50K+ | Proves the payments pipeline works at scale |
+| Beta orgs still active at 30 days | >80% (12+ of 15) | Dropout rate is the strongest early churn signal — if orgs stop using it, find out why before launch |
+| Total donations processed | $100K+ | Proves the payments pipeline works under real load |
 | Orgs that would recommend Give | >80% (NPS survey) | Product-market fit signal |
 | Orgs willing to provide testimonial | >50% | Launch marketing fuel |
-| Average onboarding time | <30 minutes | Validates self-service flow |
+| Average onboarding time (signup to first donation) | <60 minutes | Validates self-service flow end-to-end |
 | Salesforce integrations active | 4-6 | Validates the killer differentiator |
-| Critical bugs reported | Track all, resolve <48 hours | Reliability signal |
-| Feature requests collected | 30+ | Roadmap prioritization fuel |
+| Critical bugs found | Track all; resolve P0s within 24h | Reliability signal |
+| Feature requests collected | 30+ unique requests | Roadmap prioritization fuel |
+| Orgs that switch fully (abandon previous platform) | 5+ | Strongest possible PMF signal |
 
 ---
 
@@ -374,8 +416,17 @@ Where to find the first 25-30 hand-picked nonprofits for cold email:
 
 1. **Reddit threads** — Search r/nonprofit for posts complaining about Givebutter/Zeffy tips or asking for platform recommendations. DM those posters.
 2. **Givebutter/Zeffy public pages** — Both platforms have public campaign pages. Find active nonprofits using them, look up the org, find the ED/development director on LinkedIn.
-3. **AppExchange reviews** — Check reviews for Give Lively's and Classy's Salesforce packages. Orgs reviewing SF integrations are exactly our target.
+3. **AppExchange reviews** — Check reviews for competitors' Salesforce packages (Give Lively's, Classy's). Orgs who reviewed those packages are exactly our target — they care about SF integration and have already evaluated the space.
 4. **Salesforce.org Power of Us Hub** — Nonprofit Salesforce admins discussing fundraising integrations.
 5. **GuideStar/Candid** — Search for nonprofits by size ($200K-$5M revenue), location, and cause area. Cross-reference with LinkedIn to find the right contact.
-6. **Personal network** — Datawake's existing nonprofit clients and contacts.
-7. **Nonprofit Happy Hour** — Watch for "what platform should we use?" posts and engage.
+6. **Personal network** — Datawake's existing nonprofit clients and contacts. These are highest-trust leads and lowest-friction asks.
+7. **Nonprofit Happy Hour (Facebook)** — Watch for "what platform should we use?" posts and engage. Also proactively post using the Facebook blurb (Section 2).
+8. **LinkedIn search** — Search "Director of Development" or "Development Director" or "Chief Development Officer" at orgs with 5-50 employees. Filter by connection degree to find warm intro paths.
+9. **Nonprofit job boards** — Sites like Idealist, Work for Good, and Nonprofit Jobs post org contact info. Orgs actively hiring development staff are growing and often looking for better tools.
+
+### Handling overflow (if signups exceed 20)
+
+If community posts drive 50+ signups, don't scramble to onboard everyone — beta quality degrades with too many orgs. Instead:
+- Accept first 20 that clear the profile filter
+- Put extras on a prioritized waitlist (Salesforce users and Zeffy refugees jump the line)
+- Send waitlist orgs a personal "you're #X in line" email — this builds goodwill and primes them for Wave 2
