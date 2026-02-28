@@ -109,7 +109,7 @@ export default function DonationForm({ campaignId, orgTier = "basic" }: Donation
       });
       // createDonation returns { clientSecret, stripeAccountId, ... }
       setClientSecret(res.clientSecret);
-      setStripeAccountId(res.stripeAccountId);
+      setStripeAccountId(res.stripeAccountId ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
