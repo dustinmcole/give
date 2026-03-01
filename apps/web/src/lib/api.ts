@@ -113,3 +113,33 @@ export interface OrgStats {
 export function getOrgStats(orgId: string): Promise<OrgStats> {
   return request<OrgStats>(`/api/orgs/${orgId}/stats`);
 }
+
+// ─── Organization ────────────────────────────────────────
+
+export interface CreateOrganizationInput {
+  name: string;
+  slug: string;
+  email: string;
+  ein?: string;
+  website?: string;
+}
+
+export interface CreateOrganizationResponse {
+  org: {
+    id: string;
+    name: string;
+    slug: string;
+    stripeAccountId: string;
+    status: string;
+  };
+  onboardingUrl: string;
+}
+
+export function createOrganization(
+  input: CreateOrganizationInput
+): Promise<CreateOrganizationResponse> {
+  return request<CreateOrganizationResponse>("/api/orgs", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
