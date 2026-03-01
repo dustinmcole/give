@@ -10,7 +10,7 @@ The signup flow where a nonprofit organization creates their account and connect
 ## Test Steps
 
 ### 1. Sign Up
-1. Go to the sign-up page (`/sign-up`)
+1. Go to the sign-up page (Local: `http://localhost:3000/sign-up` | Prod: `https://give-web.vercel.app/sign-up`)
 2. **Verify**: Clerk sign-up form appears
 3. Create an account with email + password
 4. **Verify**: Redirected to the onboarding flow (`/onboarding`)

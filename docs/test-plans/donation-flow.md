@@ -10,7 +10,7 @@ The public donation page where donors give money to a campaign. This is the core
 ## Test Steps
 
 ### 1. Load the Donation Page
-1. Open the campaign donation URL in your browser
+1. Open the campaign donation URL in your browser (Local: `http://localhost:3000/donate/{campaignId}` | Prod: `https://give-web.vercel.app/donate/{campaignId}`)
 2. **Verify**: Page shows the campaign name, description, and a goal thermometer
 3. **Verify**: Suggested amounts show: $25, $50, $100, $250, $500, $1,000
 4. **Verify**: $50 is selected by default
@@ -62,7 +62,7 @@ The public donation page where donors give money to a campaign. This is the core
 6. **Verify**: Same error message
 
 ### 8. Invalid Campaign
-1. Go to `/donate/fake-campaign-id-12345`
+1. Go to `/donate/fake-campaign-id-12345` (Local: `http://localhost:3000/donate/fake-campaign-id-12345` | Prod: `https://give-web.vercel.app/donate/fake-campaign-id-12345`)
 2. **Verify**: Shows "Campaign not found" message
 3. **Verify**: "Return home" link is visible and works
 
