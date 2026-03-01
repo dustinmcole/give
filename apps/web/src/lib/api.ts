@@ -76,8 +76,12 @@ export function createDonation(
   });
 }
 
-export function listDonations(orgId: string): Promise<Donation[]> {
-  return request<Donation[]>(`/api/orgs/${orgId}/donations`);
+export function listDonations(orgId: string): Promise<{ data: Donation[] }> {
+  return request<{ data: Donation[] }>(`/api/donations?orgId=${orgId}`);
+}
+
+export function getRecentDonations(orgId: string, limit: number = 5): Promise<{ data: Donation[] }> {
+  return request<{ data: Donation[] }>(`/api/donations?orgId=${orgId}&limit=${limit}`);
 }
 
 // ─── Donor ───────────────────────────────────────────────

@@ -1,0 +1,6 @@
+10	feat: salesforce api integration	feat/salesforce-api-integration	OPEN	2026-02-28T22:11:08Z
+9	feat: Stripe Elements integration	feat/stripe-elements	OPEN	2026-02-28T20:48:12Z
+8	feat: setup salesforce sfdx project skeleton	feat/salesforce-sfdx-setup	OPEN	2026-02-28T20:02:34Z
+7	feat: implement email receipt service	feat/email-receipts	OPEN	2026-02-28T19:49:31Z
+3	docs: legal & compliance research — all 5 areas covered	docs/compliance-research	OPEN	2026-02-28T14:33:45Z
+2	docs: beta launch strategy and nonprofit outreach plan	docs/beta-strategy	OPEN	2026-02-28T14:05:11Z
