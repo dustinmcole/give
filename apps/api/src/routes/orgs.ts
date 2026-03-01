@@ -168,3 +168,64 @@ orgRoutes.get("/:idOrSlug/campaigns", async (c) => {
     return c.json({ error: "Failed to list campaigns" }, 500);
   }
 });
+
+// ─── GET /:id/stats — Get Stats for Org ──────────────────
+
+orgRoutes.get("/:id/stats", async (c) => {
+  const id = c.req.param("id");
+
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            campaigns: { where: { status: "ACTIVE" } },
+            donors: true,
+          },
+        },
+      },
+    });
+
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    // Compute aggregate stats for total raised
+    const totalRaisedStats = await prisma.donation.aggregate({
+      where: { orgId: id, status: "SUCCEEDED" },
+      _sum: { amountCents: true },
+    });
+
+    // Compute donations this month
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    const monthlyDonations = await prisma.donation.count({
+      where: { 
+        orgId: id, 
+        status: "SUCCEEDED",
+        createdAt: { gte: firstDayOfMonth }
+      },
+    });
+
+    // Fetch recent donations
+    const recentDonations = await prisma.donation.findMany({
+      where: { orgId: id, status: "SUCCEEDED" },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    });
+
+    return c.json({
+      totalRaisedCents: totalRaisedStats._sum.amountCents ?? 0,
+      totalDonors: org._count.donors,
+      activeCampaigns: org._count.campaigns,
+      donationsThisMonth: monthlyDonations,
+      recentDonations: recentDonations,
+    });
+  } catch (err) {
+    console.error("Error fetching organization stats:", err);
+    return c.json({ error: "Failed to fetch organization stats" }, 500);
+  }
+});
+
