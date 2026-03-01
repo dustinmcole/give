@@ -9,6 +9,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  icons: {
+    icon: "/favicon.svg",
+  },
   title: "Give — Fundraising That's Fair",
   description:
     "Transparent nonprofit fundraising with 1% fees. No hidden donor tips, no gotchas. Donation forms, CRM, events, peer-to-peer, and automatic payouts — everything your nonprofit needs.",

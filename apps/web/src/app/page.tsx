@@ -48,7 +48,7 @@ const COMPARISON = [
   {
     name: "Zeffy",
     highlight: false,
-    fee: '0%"',
+    fee: '0%',
     feeNote: "but...",
     donorTips: "17% default tip",
     monthlyFee: "$0",
@@ -99,7 +99,7 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              href="/dashboard"
+              href="/sign-in"
               className="text-sm font-medium text-gray-600 hover:text-give-primary transition-colors px-4 py-2"
             >
               Log In
@@ -462,6 +462,12 @@ export default function HomePage() {
               <a href="#compare" className="hover:text-white transition-colors">
                 Compare
               </a>
+              <Link href="/privacy" className="hover:text-white transition-colors">
+                Privacy
+              </Link>
+              <Link href="/terms" className="hover:text-white transition-colors">
+                Terms
+              </Link>
             </div>
             <div className="text-sm">
               &copy; {new Date().getFullYear()} Give. Fundraising that&apos;s fair.
