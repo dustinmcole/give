@@ -1,81 +1,121 @@
-# Test Plan: Donation Flow
+# Testing the Donation Page
 
-## What This Tests
-The public donation page where donors give money to a campaign. This is the core product flow.
+## Before You Start
+- Open Chrome or Safari on your phone or computer
+- You don't need to log in — this is a public page anyone can see
 
-## Prerequisites
-- You need a campaign URL (format: `/donate/{campaignId}`)
-- No login required — this is a public page
+## Where to Go
+🔗 **Test URL**: Check the QA Issue in GitHub for the current preview link
+(It looks like: `https://give-xxxxx.vercel.app/donate/...`)
 
-## Test Steps
+If you don't have a link, ask in #internal-give.
 
-### 1. Load the Donation Page
-1. Open the campaign donation URL in your browser (Local: `http://localhost:3000/donate/{campaignId}` | Prod: `https://give-web.vercel.app/donate/{campaignId}`)
-2. **Verify**: Page shows the campaign name, description, and a goal thermometer
-3. **Verify**: Suggested amounts show: $25, $50, $100, $250, $500, $1,000
-4. **Verify**: $50 is selected by default
-5. **Verify**: Header shows "Give" logo on left and "Secure donation" on right
+---
 
-### 2. Select a Suggested Amount
-1. Click the "$100" button
-2. **Verify**: The $100 button is highlighted/selected
-3. **Verify**: The fee breakdown updates (should show platform fee + processing fee)
-4. Click "$25"
-5. **Verify**: Selection switches to $25, fee breakdown updates
+## Test 1: Does the Page Load?
 
-### 3. Enter a Custom Amount
-1. Click the "Custom" amount field
-2. Type "75"
-3. **Verify**: Suggested amount buttons are deselected
-4. **Verify**: Fee breakdown shows correct fees for $75
-5. Clear the field and type "0.50"
-6. **Verify**: Should show an error — minimum donation is $1.00
+1. Open the donation URL
+2. You should see:
+   - A "Give" logo in the top-left
+   - "Secure donation" text in the top-right
+   - The campaign name and description
+   - A colored progress bar showing how much has been raised
+   - Dollar amount buttons: **$25, $50, $100, $250, $500, $1,000**
+   - $50 should already be highlighted/selected
 
-### 4. Toggle "Cover Fees" Checkbox
-1. Select $100 donation
-2. Note the total amount shown
-3. Check the "Cover fees" checkbox
-4. **Verify**: Total amount increases (donor pays the processing fee)
-5. Uncheck it
-6. **Verify**: Total goes back to $100
+✅ **Pass** if all of the above is visible
+❌ **Fail** if the page is blank, shows an error, or is missing any of these elements
 
-### 5. Change Donation Frequency
-1. Click "Monthly"
-2. **Verify**: "Monthly" is selected/highlighted
-3. Click "Quarterly", then "Annual", then "One-time"
-4. **Verify**: Each option highlights when selected
+---
 
-### 6. Fill in Donor Info and Submit
-1. Enter First Name: "Test"
-2. Enter Last Name: "Donor"
-3. Enter Email: "test@example.com"
-4. Click the submit/donate button
-5. **Verify**: Button shows loading state (spinner or disabled)
-6. **Verify**: Either redirects to Stripe checkout OR shows success message
+## Test 2: Picking a Donation Amount
 
-### 7. Submit with Missing Fields
-1. Clear the email field
-2. Click donate
-3. **Verify**: Error message appears: "Please fill in all required fields."
-4. Clear all fields and enter only email
-5. Click donate
-6. **Verify**: Same error message
+1. Tap/click **$100**
+   - The $100 button should light up, $50 should un-highlight
+   - You should see a fee breakdown below (something like "Platform fee: $X.XX")
+2. Tap/click **$25**
+   - Same thing — $25 highlights, $100 un-highlights, fees update
+3. Now tap the **Custom** field and type **75**
+   - All the dollar buttons should un-highlight
+   - Fee breakdown should update for $75
+4. Clear the custom field and type **0.50**
+   - You should see an error: "Please enter at least $1.00"
 
-### 8. Invalid Campaign
-1. Go to `/donate/fake-campaign-id-12345` (Local: `http://localhost:3000/donate/fake-campaign-id-12345` | Prod: `https://give-web.vercel.app/donate/fake-campaign-id-12345`)
-2. **Verify**: Shows "Campaign not found" message
-3. **Verify**: "Return home" link is visible and works
+✅ **Pass** if amounts switch cleanly and fees update each time
+❌ **Fail** if buttons stay stuck, fees don't change, or the $0.50 error doesn't show
 
-## Mobile Checks
-- [ ] Suggested amounts wrap nicely on small screens (don't overflow)
-- [ ] Custom amount field is easy to tap
-- [ ] Form fields are large enough to tap without zooming
-- [ ] Submit button is full-width and easy to reach with thumb
-- [ ] Fee breakdown text is readable (not tiny)
+---
 
-## Common Failures
-- Fee calculation shows wrong numbers (compare with $100 + 2.9% + $0.30)
-- Custom amount field doesn't clear suggested selection
-- "Cover fees" doesn't update the total
-- Submit button stays in loading state forever after error
-- Campaign not found page doesn't show on bad IDs
+## Test 3: Cover Fees Toggle
+
+1. Select **$100**
+2. Look for a checkbox that says something like "Cover processing fees"
+3. Note the total amount shown
+4. Check the box
+   - The total should go UP (you're now covering Stripe's ~3% fee)
+5. Uncheck the box
+   - Total should go back to $100
+
+✅ **Pass** if the total changes when you toggle
+❌ **Fail** if nothing happens when you check/uncheck
+
+---
+
+## Test 4: Donation Frequency
+
+1. Look for buttons/tabs: **One-time, Monthly, Quarterly, Annual**
+2. Tap each one — it should highlight when selected
+3. "One-time" should be selected by default
+
+✅ **Pass** if each option highlights correctly
+❌ **Fail** if multiple stay highlighted or none highlight
+
+---
+
+## Test 5: Filling Out Your Info and Donating
+
+1. Select $50 (or any amount)
+2. Fill in:
+   - First Name: **Test**
+   - Last Name: **Donor**
+   - Email: **test@example.com**
+3. Click the **Donate** button
+4. The button should show a spinner or say "Processing..."
+5. You should either go to a Stripe checkout page OR see a success message
+
+✅ **Pass** if the button responds and you move forward
+❌ **Fail** if the button does nothing, stays loading forever, or shows a weird error
+
+---
+
+## Test 6: Try to Donate with Missing Info
+
+1. Delete the email field (leave it blank)
+2. Click Donate
+3. You should see: **"Please fill in all required fields."**
+4. Now clear everything and only type an email
+5. Click Donate — same error should appear
+
+✅ **Pass** if the error shows for missing fields
+❌ **Fail** if it lets you submit with blank fields or shows no error
+
+---
+
+## Test 7: Bad Campaign Link
+
+1. Change the URL to something fake, like: `/donate/this-does-not-exist`
+2. You should see: **"Campaign not found"**
+3. There should be a "Return home" link — click it
+4. You should go back to the homepage
+
+✅ **Pass** if you see the error page and the link works
+❌ **Fail** if you see a blank page, a crash, or a generic error
+
+---
+
+## Mobile Checks (do these on your phone)
+- [ ] Dollar amount buttons don't get cut off or overlap
+- [ ] You can easily tap the Custom amount field
+- [ ] Form fields are big enough to type in without zooming
+- [ ] The Donate button is easy to reach with your thumb
+- [ ] Text is readable without squinting
