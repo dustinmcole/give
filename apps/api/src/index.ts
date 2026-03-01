@@ -10,8 +10,10 @@ import { campaignRoutes } from "./routes/campaigns.js";
 import { donationRoutes } from "./routes/donations.js";
 import { stripeRoutes } from "./routes/stripe.js";
 import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import { clerkAuth } from "./middleware/auth.js";
+import type { AuthVariables } from "./middleware/auth.js";
 
-const app = new Hono();
+const app = new Hono<{ Variables: AuthVariables }>();
 
 // ─── Middleware ────────────────────────────────────────────
 app.use("*", logger());
@@ -23,6 +25,26 @@ app.use(
     allowHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+app.use("*", async (c, next) => {
+  const path = c.req.path;
+  const method = c.req.method;
+
+  // Public routes that bypass auth
+  const isPublic =
+    path === "/api/health" ||
+    path.endsWith("/public") ||
+    (path === "/api/donations" && method === "POST") ||
+    path.startsWith("/api/stripe") ||
+    path.startsWith("/api/webhooks/clerk");
+
+  if (isPublic) {
+    return next();
+  }
+
+  // Require auth for everything else
+  return clerkAuth(c, next);
+});
 
 // ─── Routes ───────────────────────────────────────────────
 app.route("/api/health", healthRoutes);
