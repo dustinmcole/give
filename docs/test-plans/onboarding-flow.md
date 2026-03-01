@@ -5,84 +5,72 @@
 - You'll be creating a test account, so use a throwaway email
 
 ## Where to Go
-🔗 **Test URL**: Check the QA Issue in GitHub for the current preview link
-(It looks like: `https://give-xxxxx.vercel.app/sign-up`)
+🔗 **Test URL**: https://give-i62z1left-dustin-coles-projects-548eb4b9.vercel.app/sign-up
 
-If you don't have a link, ask in #internal-give.
+> ⚠️ **Note**: Vercel's deployment protection is currently ON (you'll get a login screen). 
+> To bypass it: go to the Vercel dashboard → Give project → Settings → Deployment Protection → set to "Off" or add yourself as a team member.
 
 ---
 
 ## Test 1: Create an Account
 
-1. Go to the sign-up URL
-2. You should see a sign-up form (powered by Clerk)
-3. Enter an email and password
-4. Complete any verification step (email code, etc.)
-5. After signing up, you should land on the **onboarding page** (`/onboarding`)
+1. Go to the sign-up page
+2. Fill in:
+   - Email: **testorg@example.com** (or any throwaway)
+   - Password: **TestPass123!**
+3. Click **Sign Up** (or whatever the button says)
+4. You should either:
+   - See a "Check your email" message, OR
+   - Go straight to the onboarding wizard
 
-✅ **Pass** if you end up on a page that says "Step 1: Organization Details"
-❌ **Fail** if you get stuck, see an error, or go somewhere unexpected
+✅ **Pass** if your account is created and you move forward
+❌ **Fail** if you get an error or nothing happens
 
 ---
 
-## Test 2: Enter Organization Details
+## Test 2: Organization Details
 
-1. On the "Step 1: Organization Details" page, you'll see two fields:
-   - **Organization Name** — the nonprofit's display name
-   - **Organization Slug** — a short URL-friendly name (like "habitat-for-humanity")
-2. Try clicking "Continue" with both fields empty
-   - Your browser should stop you (fields are required)
-3. Now fill in:
-   - Organization Name: **Test Nonprofit**
-   - Organization Slug: **test-nonprofit**
-4. Click **Continue**
-5. You should go to the Stripe connection page (`/onboarding/stripe`)
+1. After signing up, you should see a form asking about your organization
+2. Fill in:
+   - Org Name: **Test Nonprofit**
+   - EIN: **12-3456789**
+   - Website: **https://example.org**
+3. Click **Next** or **Continue**
+4. You should move to the next step
 
-✅ **Pass** if you move to the Stripe page
-❌ **Fail** if nothing happens, you see an error, or you stay on the same page
+✅ **Pass** if you advance to the next step
+❌ **Fail** if the form won't submit or shows an unexpected error
 
 ---
 
 ## Test 3: Stripe Connection
 
-1. On the Stripe page, you should see a button to connect your Stripe account
-2. Click it
-3. You should be redirected to Stripe's website to set up payments
-4. (In test mode, you can use Stripe's test data to complete this)
-5. After finishing on Stripe, you should come back to the Give app
+1. You should see a step about connecting to Stripe
+2. Click the **Connect Stripe** button
+3. You should be redirected to Stripe's onboarding page
+4. (You can stop here — just verify Stripe's page loads)
 
-✅ **Pass** if the redirect works both ways (Give → Stripe → Give)
-❌ **Fail** if the Stripe redirect breaks, or you can't get back to Give
+✅ **Pass** if Stripe's page opens
+❌ **Fail** if the button does nothing or you get an error
 
 ---
 
 ## Test 4: Onboarding Complete
 
-1. After Stripe, you should see a success/completion page
-2. Look for a button or link to go to your **Dashboard**
-3. Click it
-4. You should land on `/dashboard`
+1. After all steps, you should see a success/welcome screen
+2. There should be a link to your **Dashboard**
+3. Click it — you should see your org dashboard
 
 ✅ **Pass** if you reach the dashboard
-❌ **Fail** if the completion page is missing or the dashboard link is broken
+❌ **Fail** if you're stuck or redirected somewhere weird
 
 ---
 
 ## Test 5: Try to Skip Steps
 
-1. Without finishing onboarding, try going directly to:
-   - `/onboarding/stripe` (skip org details)
-   - `/onboarding/complete` (skip everything)
-   - `/dashboard` (skip all of onboarding)
-2. Each should either redirect you back to the correct step or show an error
+1. Start over (new browser/incognito)
+2. After creating an account, try going directly to the dashboard URL
+3. You should be redirected back to onboarding — can't skip steps
 
-✅ **Pass** if you can't skip ahead
-❌ **Fail** if you can access later steps without completing earlier ones
-
----
-
-## Mobile Checks
-- [ ] Sign-up form works on your phone
-- [ ] Organization Name and Slug fields are full-width
-- [ ] "Continue" button is easy to tap
-- [ ] Stripe redirect works in mobile browser (not just desktop)
+✅ **Pass** if skipping is blocked
+❌ **Fail** if you can access the dashboard without completing onboarding

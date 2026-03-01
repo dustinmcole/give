@@ -5,10 +5,14 @@
 - You don't need to log in — this is a public page anyone can see
 
 ## Where to Go
-🔗 **Test URL**: Check the QA Issue in GitHub for the current preview link
-(It looks like: `https://give-xxxxx.vercel.app/donate/...`)
+🔗 **Test URL**: https://give-i62z1left-dustin-coles-projects-548eb4b9.vercel.app/donate/
 
-If you don't have a link, ask in #internal-give.
+> ⚠️ **Note**: Vercel's deployment protection is currently ON (you'll get a login screen). 
+> To bypass it: go to the Vercel dashboard → Give project → Settings → Deployment Protection → set to "Off" or add yourself as a team member.
+> Once that's sorted, the URL above will work.
+
+You'll need a campaign ID to test. The full URL looks like:
+`https://give-i62z1left-dustin-coles-projects-548eb4b9.vercel.app/donate/CAMPAIGN-ID`
 
 ---
 
