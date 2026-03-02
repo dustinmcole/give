@@ -168,3 +168,74 @@ orgRoutes.get("/:idOrSlug/campaigns", async (c) => {
     return c.json({ error: "Failed to list campaigns" }, 500);
   }
 });
+
+// ─── PATCH /:id — Update Organization ────────────────────
+
+const updateOrgSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  slug: z
+    .string()
+    .min(2)
+    .max(100)
+    .regex(
+      /^[a-z0-9][a-z0-9-]*[a-z0-9]$/,
+      "Slug must be lowercase alphanumeric with hyphens"
+    )
+    .optional(),
+  website: z.string().url().nullable().optional(),
+  logoUrl: z.string().url().nullable().optional(),
+  payoutSchedule: z.enum(["DAILY", "WEEKLY", "MONTHLY", "MANUAL"]).optional(),
+  defaultCurrency: z.string().min(3).max(3).optional(),
+  coverFeesDefault: z.boolean().optional(),
+  status: z
+    .enum(["ONBOARDING", "ACTIVE", "SUSPENDED", "DEACTIVATED"])
+    .optional(),
+});
+
+orgRoutes.patch("/:id", async (c) => {
+  const id = c.req.param("id");
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = updateOrgSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      400
+    );
+  }
+
+  try {
+    const existing = await prisma.organization.findUnique({ where: { id } });
+    if (!existing) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    // If slug is changing, check uniqueness
+    if (parsed.data.slug && parsed.data.slug !== existing.slug) {
+      const slugConflict = await prisma.organization.findUnique({
+        where: { slug: parsed.data.slug },
+      });
+      if (slugConflict) {
+        return c.json(
+          { error: "An organization with this slug already exists" },
+          409
+        );
+      }
+    }
+
+    const org = await prisma.organization.update({
+      where: { id },
+      data: parsed.data,
+    });
+
+    return c.json(org);
+  } catch (err) {
+    console.error("Error updating organization:", err);
+    return c.json({ error: "Failed to update organization" }, 500);
+  }
+});
+
