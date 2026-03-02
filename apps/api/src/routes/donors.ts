@@ -50,11 +50,28 @@ donorRoutes.get("/", clerkAuth, async (c) => {
   }
 
   const { orgId, search, page, limit, sortBy, sortOrder, tag } = query.data;
+
+  // ── Org membership authorization ────────────────────────
+  // Verify the authenticated user is a member of the requested org
+  const userId = c.get("userId");
+  const membership = await prisma.orgMember.findUnique({
+    where: {
+      userId_orgId: { userId, orgId },
+    },
+    select: { id: true },
+  });
+
+  if (!membership) {
+    return c.json(
+      { error: "Forbidden: you are not a member of this organization" },
+      403
+    );
+  }
+
   const skip = (page - 1) * limit;
 
   // Build where clause
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {
+  const where: Record<string, unknown> = {
     orgId,
   };
 
