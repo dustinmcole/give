@@ -376,3 +376,21 @@ export function updateOrg(
     token,
   });
 }
+
+// ─── EIN Verification ────────────────────────────────────
+
+export interface EinVerificationResult {
+  valid: boolean;
+  name?: string;
+  city?: string;
+  state?: string;
+  deductibility?: string;
+  status?: string;
+  revoked?: boolean;
+  error?: string;
+}
+
+export function verifyEin(ein: string): Promise<EinVerificationResult> {
+  const normalized = ein.replace(/\D/g, "");
+  return request<EinVerificationResult>(`/api/verify-ein/${normalized}`);
+}
