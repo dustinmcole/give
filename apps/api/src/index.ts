@@ -9,6 +9,7 @@ import { orgRoutes } from "./routes/orgs.js";
 import { campaignRoutes } from "./routes/campaigns.js";
 import { donationRoutes } from "./routes/donations.js";
 import { stripeRoutes } from "./routes/stripe.js";
+import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
 
 const app = new Hono();
 
@@ -29,6 +30,8 @@ app.route("/api/orgs", orgRoutes);
 app.route("/api/campaigns", campaignRoutes);
 app.route("/api/donations", donationRoutes);
 app.route("/api/stripe", stripeRoutes);
+// Note: no clerkAuth middleware — Clerk calls this directly
+app.route("/api/webhooks/clerk", clerkWebhookRoutes);
 
 // ─── 404 catch-all ────────────────────────────────────────
 app.notFound((c) => {
