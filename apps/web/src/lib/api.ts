@@ -36,6 +36,12 @@ export interface Campaign {
   coverImageUrl?: string;
   createdAt: string;
   updatedAt: string;
+  org?: {
+    id: string;
+    name: string;
+    slug: string;
+    ein?: string | null;
+  };
 }
 
 export function getDonationCampaign(id: string): Promise<Campaign> {
@@ -62,8 +68,41 @@ export interface Donation {
   createdAt: string;
 }
 
-export interface CreateDonationResponse {
+export interface DonationDetail {
   id: string;
+  amountCents: number;
+  totalChargedCents: number;
+  currency: string;
+  frequency: string;
+  status: string;
+  coverFees: boolean;
+  receiptNumber: string | null;
+  createdAt: string;
+  donor: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    anonymous: boolean;
+  };
+  campaign: {
+    id: string;
+    title: string;
+    slug: string;
+    color: string | null;
+    description: string | null;
+  };
+  org: {
+    id: string;
+    name: string;
+    slug: string;
+    logoUrl: string | null;
+    website: string | null;
+  };
+}
+
+export interface CreateDonationResponse {
+  donationId: string;
   clientSecret: string;
 }
 
@@ -74,6 +113,10 @@ export function createDonation(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function getDonation(id: string): Promise<DonationDetail> {
+  return request<DonationDetail>(`/api/donations/${id}`);
 }
 
 export function listDonations(orgId: string): Promise<Donation[]> {

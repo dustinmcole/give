@@ -6,6 +6,12 @@ import {
   createConnectAccount,
   createAccountLink,
 } from "../lib/stripe.js";
+import { getResend, getFromEmail } from "../lib/email.js";
+import { generateReceiptNumber } from "../lib/receipt-number.js";
+import {
+  buildDonationReceiptHtml,
+  buildDonationReceiptText,
+} from "../emails/donation-receipt.js";
 import type Stripe from "stripe";
 
 export const stripeRoutes = new Hono();
@@ -225,10 +231,100 @@ async function handlePaymentIntentSucceeded(
     },
   });
 
-  // Queue receipt email (placeholder — will integrate with email service)
-  console.log(
-    `TODO: Queue receipt email for donation ${donationId} to donor ${donation.donorId}`
-  );
+  // Send donation receipt email
+  await sendReceiptEmail(donationId, donation.orgId);
+}
+
+/**
+ * Sends a donation receipt email for the given donation.
+ * Generates a receipt number, updates the donation record, and emails the donor.
+ * Errors are logged but never thrown — we never fail a webhook due to email issues.
+ */
+async function sendReceiptEmail(
+  donationId: string,
+  orgId: string
+): Promise<void> {
+  try {
+    // Fetch full donation with related data
+    const donation = await prisma.donation.findUnique({
+      where: { id: donationId },
+      include: {
+        donor: true,
+        campaign: true,
+        org: true,
+      },
+    });
+
+    if (!donation) {
+      console.error(`sendReceiptEmail: donation ${donationId} not found`);
+      return;
+    }
+
+    // Generate receipt number if not already set
+    let receiptNumber = donation.receiptNumber;
+    if (!receiptNumber) {
+      receiptNumber = await generateReceiptNumber(orgId, donation.createdAt);
+      await prisma.donation.update({
+        where: { id: donationId },
+        data: { receiptNumber },
+      });
+    }
+
+    // Build receipt template data
+    const receiptData = {
+      orgName: donation.org.name,
+      orgEin: donation.org.ein,
+      donorFirstName: donation.donor.firstName,
+      donorLastName: donation.donor.lastName,
+      donorEmail: donation.donor.email,
+      amountCents: donation.amountCents,
+      currency: donation.currency,
+      donationDate: donation.createdAt,
+      receiptNumber,
+      campaignName: donation.campaign.title,
+      dedicationType: donation.dedicationType,
+      dedicationName: donation.dedicationName,
+    };
+
+    const html = buildDonationReceiptHtml(receiptData);
+    const text = buildDonationReceiptText(receiptData);
+
+    // Send via Resend
+    const resend = getResend();
+    const fromEmail = getFromEmail();
+
+    const { error } = await resend.emails.send({
+      from: `${donation.org.name} via Give <${fromEmail}>`,
+      to: donation.donor.email,
+      subject: `Your donation receipt from ${donation.org.name} — ${receiptNumber}`,
+      html,
+      text,
+    });
+
+    if (error) {
+      console.error(
+        `Failed to send receipt email for donation ${donationId}:`,
+        error
+      );
+      return;
+    }
+
+    // Mark receipt as sent
+    await prisma.donation.update({
+      where: { id: donationId },
+      data: { receiptSentAt: new Date() },
+    });
+
+    console.log(
+      `Receipt email sent for donation ${donationId} to ${donation.donor.email} (receipt: ${receiptNumber})`
+    );
+  } catch (err) {
+    // Never propagate — a failed email must not fail the webhook
+    console.error(
+      `Unexpected error sending receipt email for donation ${donationId}:`,
+      err
+    );
+  }
 }
 
 async function handlePaymentIntentFailed(
