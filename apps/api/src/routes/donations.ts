@@ -4,12 +4,17 @@ import { prisma } from "@give/db";
 import type { PlanTier as PrismaPlanTier } from "@give/db";
 import { calculateFees } from "../lib/fees.js";
 import { getApplicationFeeAmount } from "../lib/fees.js";
-import { createPaymentIntent } from "../lib/stripe.js";
+import {
+  createPaymentIntent,
+  findOrCreateCustomer,
+  createSubscription,
+  computeApplicationFeePercent,
+} from "../lib/stripe.js";
 import type { PlanTier, PaymentMethod } from "@give/shared";
 
 export const donationRoutes = new Hono();
 
-// ─── Validation Schemas ───────────────────────────────────
+// --- Validation Schemas ---
 
 const createDonationSchema = z.object({
   amount: z.number().int().positive().min(100), // minimum $1.00
@@ -39,7 +44,7 @@ const listDonationsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-// ─── Map shared types to Prisma enums ─────────────────────
+// --- Map shared types to Prisma enums ---
 
 const FREQUENCY_MAP = {
   one_time: "ONE_TIME",
@@ -59,7 +64,7 @@ function planTierToShared(tier: PrismaPlanTier): PlanTier {
   return tier === "PRO" ? "pro" : "basic";
 }
 
-// ─── POST / — Create Donation ─────────────────────────────
+// --- POST / - Create Donation ---
 
 donationRoutes.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
@@ -153,34 +158,84 @@ donationRoutes.post("/", async (c) => {
       },
     });
 
-    // Create Stripe PaymentIntent on the connected account
-    const applicationFee = getApplicationFeeAmount(fees.platformFee);
+    const donationMeta = {
+      donationId: donation.id,
+      campaignId: campaign.id,
+      orgId: org.id,
+      donorId: donor.id,
+    };
 
-    const paymentIntent = await createPaymentIntent(
-      fees.totalCharged,
-      applicationFee,
-      org.stripeAccountId,
-      {
-        donationId: donation.id,
-        campaignId: campaign.id,
-        orgId: org.id,
-        donorId: donor.id,
-      }
-    );
+    let clientSecret: string | null = null;
 
-    // Update donation with Stripe PaymentIntent ID
-    await prisma.donation.update({
-      where: { id: donation.id },
-      data: {
-        stripePaymentIntentId: paymentIntent.id,
-        status: "PROCESSING",
-      },
-    });
+    if (input.frequency === "one_time") {
+      // One-time donation: create PaymentIntent
+      const applicationFee = getApplicationFeeAmount(fees.platformFee);
+
+      const paymentIntent = await createPaymentIntent(
+        fees.totalCharged,
+        applicationFee,
+        org.stripeAccountId,
+        donationMeta
+      );
+
+      await prisma.donation.update({
+        where: { id: donation.id },
+        data: {
+          stripePaymentIntentId: paymentIntent.id,
+          status: "PROCESSING",
+        },
+      });
+
+      clientSecret = paymentIntent.client_secret;
+    } else {
+      // Recurring donation: create Stripe Subscription
+      const customerName = `${input.donor.firstName} ${input.donor.lastName}`;
+
+      const customer = await findOrCreateCustomer(
+        input.donor.email,
+        customerName,
+        org.stripeAccountId,
+        { orgId: org.id, donorId: donor.id }
+      );
+
+      const appFeePercent = computeApplicationFeePercent(
+        fees.platformFee,
+        fees.totalCharged
+      );
+
+      const subscription = await createSubscription({
+        customerId: customer.id,
+        amountCents: fees.totalCharged,
+        currency: input.currency,
+        frequency: input.frequency as "monthly" | "quarterly" | "annual",
+        applicationFeePercent: appFeePercent,
+        stripeAccountId: org.stripeAccountId,
+        metadata: donationMeta,
+      });
+
+      // Extract PaymentIntent from latest invoice
+      type StripeInvoice = import("stripe").Stripe.Invoice;
+      type StripePaymentIntent = import("stripe").Stripe.PaymentIntent;
+      const latestInvoice = subscription.latest_invoice as StripeInvoice | null;
+      const paymentIntent = latestInvoice?.payment_intent as StripePaymentIntent | null;
+
+      await prisma.donation.update({
+        where: { id: donation.id },
+        data: {
+          stripeSubscriptionId: subscription.id,
+          stripeCustomerId: customer.id,
+          stripePaymentIntentId: paymentIntent?.id ?? null,
+          status: "PROCESSING",
+        },
+      });
+
+      clientSecret = paymentIntent?.client_secret ?? null;
+    }
 
     return c.json(
       {
         donationId: donation.id,
-        clientSecret: paymentIntent.client_secret,
+        clientSecret,
         stripeAccountId: org.stripeAccountId,
         fees: {
           donationAmount: fees.donationAmount,
@@ -198,7 +253,7 @@ donationRoutes.post("/", async (c) => {
   }
 });
 
-// ─── GET /:id — Get Donation by ID ───────────────────────
+// --- GET /:id - Get Donation by ID ---
 
 donationRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
@@ -248,7 +303,7 @@ donationRoutes.get("/:id", async (c) => {
   }
 });
 
-// ─── GET / — List Donations for Org ──────────────────────
+// --- GET / - List Donations for Org ---
 
 donationRoutes.get("/", async (c) => {
   const query = listDonationsSchema.safeParse({

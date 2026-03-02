@@ -197,6 +197,36 @@ function formatFrequency(freq: string): string {
   return map[freq] ?? freq;
 }
 
+function isRecurring(freq: string): boolean {
+  return freq === "MONTHLY" || freq === "QUARTERLY" || freq === "ANNUAL";
+}
+
+function RecurringBadge({ frequency }: { frequency: string }) {
+  if (!isRecurring(frequency)) return null;
+  return (
+    <span
+      title="Recurring donation"
+      className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 ml-1.5"
+    >
+      <svg
+        className="w-3 h-3"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+        />
+      </svg>
+      Recurring
+    </span>
+  );
+}
+
 function formatPaymentMethod(method: string | null): string {
   if (!method) return "—";
   const map: Record<string, string> = {
@@ -536,7 +566,10 @@ export default function DonorDetailPage() {
                         )}
                       </td>
                       <td className="py-4 px-4 text-gray-600">
-                        {formatFrequency(don.frequency)}
+                        <span className="inline-flex items-center">
+                          {formatFrequency(don.frequency)}
+                          <RecurringBadge frequency={don.frequency} />
+                        </span>
                       </td>
                       <td className="py-4 px-4">
                         <span
