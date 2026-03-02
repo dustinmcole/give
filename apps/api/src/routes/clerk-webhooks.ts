@@ -16,6 +16,7 @@ interface ClerkUserCreatedEvent {
   data: {
     id: string;
     email_addresses: ClerkEmailAddress[];
+    primary_email_address_id: string;
     first_name: string | null;
     last_name: string | null;
     image_url: string | null;
@@ -27,6 +28,7 @@ interface ClerkUserUpdatedEvent {
   data: {
     id: string;
     email_addresses: ClerkEmailAddress[];
+    primary_email_address_id: string;
     first_name: string | null;
     last_name: string | null;
     image_url: string | null;
@@ -84,11 +86,13 @@ clerkWebhookRoutes.post("/", async (c) => {
   try {
     switch (event.type) {
       case "user.created":
-        await handleUserCreated(event);
+        await upsertUserFromClerk(event.data);
+        console.log(`User provisioned for clerkId: ${event.data.id}`);
         break;
 
       case "user.updated":
-        await handleUserUpdated(event);
+        await upsertUserFromClerk(event.data);
+        console.log(`User updated for clerkId: ${event.data.id}`);
         break;
 
       case "user.deleted":
@@ -107,59 +111,38 @@ clerkWebhookRoutes.post("/", async (c) => {
   }
 });
 
+// ─── Shared Upsert Logic ──────────────────────────────────
+
+type ClerkUserData = ClerkUserCreatedEvent["data"] | ClerkUserUpdatedEvent["data"];
+
+async function upsertUserFromClerk(data: ClerkUserData) {
+  const { id: clerkId, email_addresses, primary_email_address_id, first_name, last_name, image_url } = data;
+
+  // Prefer the primary email address; fall back to first in list
+  const email =
+    email_addresses.find((e) => e.id === primary_email_address_id)?.email_address ??
+    email_addresses[0]?.email_address ??
+    "";
+
+  await prisma.user.upsert({
+    where: { clerkId },
+    create: {
+      clerkId,
+      email,
+      firstName: first_name ?? "",
+      lastName: last_name ?? "",
+      avatarUrl: image_url ?? null,
+    },
+    update: {
+      email,
+      firstName: first_name ?? "",
+      lastName: last_name ?? "",
+      avatarUrl: image_url ?? null,
+    },
+  });
+}
+
 // ─── Webhook Handlers ─────────────────────────────────────
-
-async function handleUserCreated(event: ClerkUserCreatedEvent) {
-  const { id: clerkId, email_addresses, first_name, last_name, image_url } =
-    event.data;
-
-  const email = email_addresses[0]?.email_address ?? "";
-
-  await prisma.user.upsert({
-    where: { clerkId },
-    create: {
-      clerkId,
-      email,
-      firstName: first_name ?? "",
-      lastName: last_name ?? "",
-      avatarUrl: image_url ?? null,
-    },
-    update: {
-      email,
-      firstName: first_name ?? "",
-      lastName: last_name ?? "",
-      avatarUrl: image_url ?? null,
-    },
-  });
-
-  console.log(`User provisioned for clerkId: ${clerkId} (${email})`);
-}
-
-async function handleUserUpdated(event: ClerkUserUpdatedEvent) {
-  const { id: clerkId, email_addresses, first_name, last_name, image_url } =
-    event.data;
-
-  const email = email_addresses[0]?.email_address ?? "";
-
-  await prisma.user.upsert({
-    where: { clerkId },
-    create: {
-      clerkId,
-      email,
-      firstName: first_name ?? "",
-      lastName: last_name ?? "",
-      avatarUrl: image_url ?? null,
-    },
-    update: {
-      email,
-      firstName: first_name ?? "",
-      lastName: last_name ?? "",
-      avatarUrl: image_url ?? null,
-    },
-  });
-
-  console.log(`User updated for clerkId: ${clerkId}`);
-}
 
 function handleUserDeleted(event: ClerkUserDeletedEvent) {
   // MVP: log only, no delete to preserve donation/activity history
