@@ -13,7 +13,8 @@ model Organization {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
-  ein       String?  // IRS EIN for 501(c)(3) verification
+  ein          String?  // IRS EIN for 501(c)(3) verification
+  einVerified  Boolean  @default(false)
   website   String?
   logoUrl   String?
   planTier  PlanTier @default(BASIC)
