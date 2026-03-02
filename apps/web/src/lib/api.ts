@@ -328,6 +328,64 @@ export function createOrganization(
   });
 }
 
+// ─── Reporting ───────────────────────────────────────────
+
+export interface ReportingSummary {
+  totalRaisedCents: number;
+  totalDonors: number;
+  totalDonations: number;
+  activeCampaigns: number;
+  avgDonationCents: number;
+  recurringDonorCount: number;
+  donorRetentionRate: number;
+}
+
+export interface DailyTrendPoint {
+  date: string;
+  amountCents: number;
+  count: number;
+}
+
+export interface CampaignBreakdownItem {
+  campaignId: string;
+  title: string;
+  raisedCents: number;
+  count: number;
+}
+
+export interface PaymentMethodBreakdownItem {
+  method: string;
+  count: number;
+  amountCents: number;
+}
+
+export interface ReportingOverview {
+  summary: ReportingSummary;
+  dailyTrend: DailyTrendPoint[];
+  campaignBreakdown: CampaignBreakdownItem[];
+  paymentMethodBreakdown: PaymentMethodBreakdownItem[];
+}
+
+export interface GetReportingOverviewParams {
+  orgId: string;
+  startDate?: string;
+  endDate?: string;
+  token: string;
+}
+
+export function getReportingOverview(
+  params: GetReportingOverviewParams
+): Promise<ReportingOverview> {
+  const { orgId, startDate, endDate, token } = params;
+  const qs = new URLSearchParams({ orgId });
+  if (startDate) qs.set("startDate", startDate);
+  if (endDate) qs.set("endDate", endDate);
+
+  return request<ReportingOverview>(`/api/reporting/overview?${qs.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 // ─── Organization (get + update) ─────────────────────────
 
 export interface Org {
@@ -446,3 +504,4 @@ export function removeDonorTag(
     method: "DELETE",
   });
 }
+
