@@ -105,9 +105,12 @@ export default function CampaignsPage() {
             Manage your fundraising campaigns.
           </p>
         </div>
-        <button className="text-sm font-semibold text-white bg-give-primary hover:bg-give-primary-dark transition-colors px-5 py-2.5 rounded-lg cursor-pointer">
+        <Link
+          href="/dashboard/campaigns/new"
+          className="text-sm font-semibold text-white bg-give-primary hover:bg-give-primary-dark transition-colors px-5 py-2.5 rounded-lg"
+        >
           Create Campaign
-        </button>
+        </Link>
       </div>
 
       {/* ── Campaign Table ─────────────────────────────── */}
