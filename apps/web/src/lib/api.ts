@@ -245,3 +245,45 @@ export function createOrganization(
     body: JSON.stringify(input),
   });
 }
+
+// ─── Organization (get + update) ─────────────────────────
+
+export interface Org {
+  id: string;
+  name: string;
+  slug: string;
+  ein: string | null;
+  website: string | null;
+  logoUrl: string | null;
+  planTier: "BASIC" | "PRO";
+  status: "ONBOARDING" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+  stripeAccountId: string | null;
+  stripeOnboarded: boolean;
+  payoutSchedule: "DAILY" | "WEEKLY" | "MONTHLY" | "MANUAL";
+  defaultCurrency: string;
+  coverFeesDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateOrgInput {
+  name?: string;
+  slug?: string;
+  website?: string | null;
+  logoUrl?: string | null;
+  payoutSchedule?: "DAILY" | "WEEKLY" | "MONTHLY" | "MANUAL";
+  defaultCurrency?: string;
+  coverFeesDefault?: boolean;
+  status?: "ONBOARDING" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+}
+
+export function getOrg(id: string): Promise<Org> {
+  return request<Org>(`/api/orgs/${id}`);
+}
+
+export function updateOrg(id: string, input: UpdateOrgInput): Promise<Org> {
+  return request<Org>(`/api/orgs/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
