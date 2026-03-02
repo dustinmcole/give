@@ -52,6 +52,65 @@ export function listCampaigns(orgId: string): Promise<Campaign[]> {
   return request<Campaign[]>(`/api/orgs/${orgId}/campaigns`);
 }
 
+
+export interface CreateCampaignInput {
+  title: string;
+  slug: string;
+  description?: string;
+  type?: Campaign["type"];
+  status?: Campaign["status"];
+  goalAmountCents?: number;
+  orgId: string;
+  coverImageUrl?: string | null;
+  color?: string | null;
+  showDonorRoll?: boolean;
+  showGoal?: boolean;
+  allowRecurring?: boolean;
+  allowCustomAmount?: boolean;
+  suggestedAmounts?: number[];
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+export interface UpdateCampaignInput {
+  title?: string;
+  slug?: string;
+  description?: string;
+  type?: Campaign["type"];
+  status?: Campaign["status"];
+  goalAmountCents?: number | null;
+  coverImageUrl?: string | null;
+  color?: string | null;
+  showDonorRoll?: boolean;
+  showGoal?: boolean;
+  allowRecurring?: boolean;
+  allowCustomAmount?: boolean;
+  suggestedAmounts?: number[];
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+export function getCampaign(id: string): Promise<Campaign> {
+  return request<Campaign>(`/api/campaigns/${id}`);
+}
+
+export function createCampaign(input: CreateCampaignInput): Promise<Campaign> {
+  return request<Campaign>("/api/campaigns", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCampaign(
+  id: string,
+  input: UpdateCampaignInput
+): Promise<Campaign> {
+  return request<Campaign>(`/api/campaigns/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 // ─── Donation ────────────────────────────────────────────
 
 export interface Donation {
