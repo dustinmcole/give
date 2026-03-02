@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { listDonors } from "@/lib/api";
 import type { Donor } from "@/lib/api";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
@@ -50,6 +51,7 @@ function DonorRowSkeleton() {
 
 export default function DonorsPage() {
   const { orgId, loading: orgLoading, error: orgError } = useCurrentOrg();
+  const { getToken } = useAuth();
   const [donors, setDonors] = useState<Donor[]>([]);
   const [donorsLoading, setDonorsLoading] = useState(false);
   const [donorsError, setDonorsError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export default function DonorsPage() {
     setDonorsLoading(true);
     setDonorsError(null);
 
-    listDonors(orgId)
+    listDonors(orgId, getToken)
       .then((data) => setDonors(data))
       .catch((err: unknown) => {
         setDonorsError(err instanceof Error ? err.message : "Failed to load donors");
