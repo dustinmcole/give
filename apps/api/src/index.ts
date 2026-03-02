@@ -8,6 +8,7 @@ import { healthRoutes } from "./routes/health.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { campaignRoutes } from "./routes/campaigns.js";
 import { donationRoutes } from "./routes/donations.js";
+import { donorRoutes } from "./routes/donors.js";
 import { stripeRoutes } from "./routes/stripe.js";
 import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
 import { clerkAuth } from "./middleware/auth.js";
@@ -51,6 +52,7 @@ app.route("/api/health", healthRoutes);
 app.route("/api/orgs", orgRoutes);
 app.route("/api/campaigns", campaignRoutes);
 app.route("/api/donations", donationRoutes);
+app.route("/api/donors", donorRoutes);
 app.route("/api/stripe", stripeRoutes);
 // Note: no clerkAuth middleware — Clerk calls this directly
 app.route("/api/webhooks/clerk", clerkWebhookRoutes);
