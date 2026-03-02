@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   calculateFees,
   type DonationFrequency,
@@ -31,6 +32,7 @@ export default function DonationForm({
   campaignId,
   orgTier = "basic",
 }: DonationFormProps) {
+  const router = useRouter();
   const [amount, setAmount] = useState<number | null>(50);
   const [customAmount, setCustomAmount] = useState("");
   const [isCustom, setIsCustom] = useState(false);
@@ -42,7 +44,6 @@ export default function DonationForm({
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   const effectiveAmountDollars = isCustom
     ? parseFloat(customAmount) || 0
@@ -80,7 +81,7 @@ export default function DonationForm({
     setIsSubmitting(true);
 
     try {
-      await createDonation({
+      const result = await createDonation({
         amount: effectiveAmountCents,
         currency: "usd",
         frequency,
@@ -94,29 +95,14 @@ export default function DonationForm({
           anonymous: false,
         },
       });
-      setSuccess(true);
+      router.push(
+        `/donate/${campaignId}/thank-you?donationId=${result.donationId}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  if (success) {
-    return (
-      <div className="text-center py-12 px-6">
-        <div className="w-16 h-16 bg-give-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-give-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Thank you!</h3>
-        <p className="text-gray-600">
-          Your ${effectiveAmountDollars.toFixed(2)} donation has been submitted.
-          You will receive a receipt at {email}.
-        </p>
-      </div>
-    );
   }
 
   return (

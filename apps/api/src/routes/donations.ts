@@ -220,6 +220,8 @@ donationRoutes.get("/:id", async (c) => {
             id: true,
             title: true,
             slug: true,
+            color: true,
+            description: true,
           },
         },
         org: {
@@ -227,6 +229,8 @@ donationRoutes.get("/:id", async (c) => {
             id: true,
             name: true,
             slug: true,
+            logoUrl: true,
+            website: true,
           },
         },
       },
