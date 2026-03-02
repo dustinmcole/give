@@ -34,6 +34,21 @@ function friendlyFrequency(freq: string): string {
   return map[freq] ?? freq;
 }
 
+// ─── Social share URL helpers ─────────────────────────────
+
+function twitterShareUrl(text: string, url: string): string {
+  return `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+}
+
+function facebookShareUrl(url: string): string {
+  return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+}
+
+function linkedinShareUrl(url: string, text?: string): string {
+  const base = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+  return text ? `${base}&summary=${encodeURIComponent(text)}` : base;
+}
+
 // ─── Loading Skeleton ─────────────────────────────────────
 
 function Skeleton({ className }: { className?: string }) {
@@ -154,6 +169,23 @@ function SuccessContent({
       : `https://givewith.us/donate/${campaignId}`;
   const shareTitle = `Support ${donation.campaign.title}`;
   const shareDescription = `I just donated to ${donation.campaign.title} via ${donation.org.name}! 💙 Join me in supporting this cause.`;
+  const shareText = shareDescription;
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(campaignUrl);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = campaignUrl;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 print:bg-white">
