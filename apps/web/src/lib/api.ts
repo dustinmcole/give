@@ -36,6 +36,12 @@ export interface Campaign {
   coverImageUrl?: string;
   createdAt: string;
   updatedAt: string;
+  org?: {
+    id: string;
+    name: string;
+    slug: string;
+    ein?: string | null;
+  };
 }
 
 export function getDonationCampaign(id: string): Promise<Campaign> {

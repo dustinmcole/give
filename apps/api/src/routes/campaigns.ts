@@ -165,6 +165,7 @@ campaignRoutes.get("/:id", async (c) => {
             id: true,
             name: true,
             slug: true,
+            ein: true,
           },
         },
         _count: {
@@ -320,6 +321,7 @@ campaignRoutes.get("/:id/public", async (c) => {
             slug: true,
             logoUrl: true,
             coverFeesDefault: true,
+            ein: true,
           },
         },
       },
