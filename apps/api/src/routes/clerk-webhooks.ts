@@ -120,14 +120,14 @@ async function handleUserCreated(event: ClerkUserCreatedEvent) {
     create: {
       clerkId,
       email,
-      firstName: first_name ?? null,
-      lastName: last_name ?? null,
+      firstName: first_name ?? "",
+      lastName: last_name ?? "",
       avatarUrl: image_url ?? null,
     },
     update: {
       email,
-      firstName: first_name ?? null,
-      lastName: last_name ?? null,
+      firstName: first_name ?? "",
+      lastName: last_name ?? "",
       avatarUrl: image_url ?? null,
     },
   });
@@ -146,14 +146,14 @@ async function handleUserUpdated(event: ClerkUserUpdatedEvent) {
     create: {
       clerkId,
       email,
-      firstName: first_name ?? null,
-      lastName: last_name ?? null,
+      firstName: first_name ?? "",
+      lastName: last_name ?? "",
       avatarUrl: image_url ?? null,
     },
     update: {
       email,
-      firstName: first_name ?? null,
-      lastName: last_name ?? null,
+      firstName: first_name ?? "",
+      lastName: last_name ?? "",
       avatarUrl: image_url ?? null,
     },
   });
