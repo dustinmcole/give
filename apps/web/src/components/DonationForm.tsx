@@ -41,7 +41,7 @@ export default function DonationForm({
   const [customAmount, setCustomAmount] = useState("");
   const [isCustom, setIsCustom] = useState(false);
   const [frequency, setFrequency] = useState<DonationFrequency>("one_time");
-  const [paymentMethod] = useState<PaymentMethod>("card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [coverFees, setCoverFees] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -215,7 +215,7 @@ export default function DonationForm({
 
       {/* ── Cover the Fee ───────────────────────────────── */}
       {fees && (
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -225,40 +225,89 @@ export default function DonationForm({
             />
             <div className="text-sm">
               <span className="font-medium text-gray-900">
-                Cover the transaction fees
+                Cover the fees so 100% goes to{" "}
+                {orgName ?? "this nonprofit"}
               </span>
               <span className="text-gray-500 block mt-0.5">
-                Adding ${formatCents(fees.processingFee + fees.platformFee)} ensures
-                100% of your ${effectiveAmountDollars.toFixed(2)} donation reaches
-                the nonprofit.
+                Add ${formatCents(fees.processingFee + fees.platformFee)} to
+                cover transaction costs — your full ${effectiveAmountDollars.toFixed(2)}{" "}
+                reaches the cause.
               </span>
             </div>
           </label>
 
-          <div className="mt-3 pt-3 border-t border-gray-200 space-y-1 text-xs text-gray-500">
+          {/* Fee breakdown — always visible so donor knows what they're paying */}
+          <div className="mt-3 pt-3 border-t border-blue-100 space-y-1 text-xs text-gray-500">
             <div className="flex justify-between">
-              <span>Donation</span>
+              <span>Your donation</span>
               <span>${formatCents(fees.donationAmount)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Processing fee</span>
+              <span>
+                Processing fee
+                {paymentMethod === "ach" ? " (ACH, capped at $5)" : " (2.2% + $0.30)"}
+              </span>
               <span>${formatCents(fees.processingFee)}</span>
             </div>
             <div className="flex justify-between">
               <span>Platform fee ({orgTier === "pro" ? "2" : "1"}%)</span>
               <span>${formatCents(fees.platformFee)}</span>
             </div>
-            <div className="flex justify-between font-semibold text-gray-900 pt-1 border-t border-gray-200">
+            <div className="flex justify-between font-semibold text-gray-900 pt-1 border-t border-blue-100">
               <span>You pay</span>
               <span>${formatCents(fees.totalCharged)}</span>
             </div>
             <div className="flex justify-between font-semibold text-give-accent">
-              <span>Nonprofit receives</span>
+              <span>{orgName ?? "Nonprofit"} receives</span>
               <span>${formatCents(fees.netToOrg)}</span>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Payment Method ──────────────────────────────── */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Payment Method
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setPaymentMethod("card")}
+            className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border-2 text-sm font-medium transition-all cursor-pointer ${
+              paymentMethod === "card"
+                ? "border-give-primary bg-give-primary/5 text-give-primary"
+                : "border-gray-200 text-gray-600 hover:border-gray-300"
+            }`}
+          >
+            {/* Credit card icon */}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            Card
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaymentMethod("ach")}
+            className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border-2 text-sm font-medium transition-all cursor-pointer ${
+              paymentMethod === "ach"
+                ? "border-give-primary bg-give-primary/5 text-give-primary"
+                : "border-gray-200 text-gray-600 hover:border-gray-300"
+            }`}
+          >
+            {/* Bank icon */}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+            </svg>
+            Bank (ACH)
+          </button>
+        </div>
+        {paymentMethod === "ach" && (
+          <p className="mt-2 text-xs text-gray-400">
+            ACH bank transfers have lower fees (0.8%, max $5) — great for larger gifts.
+          </p>
+        )}
+      </div>
 
       {/* ── Payment Placeholder ─────────────────────────── */}
       <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
