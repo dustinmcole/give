@@ -394,3 +394,55 @@ export function verifyEin(ein: string): Promise<EinVerificationResult> {
   const normalized = ein.replace(/\D/g, "");
   return request<EinVerificationResult>(`/api/verify-ein/${normalized}`);
 }
+
+// ─── Donor Detail ─────────────────────────────────────────
+
+export interface DonorTag {
+  id: string;
+  name: string;
+}
+
+export interface DonorDonation {
+  id: string;
+  amountCents: number;
+  frequency: string;
+  status: string;
+  paymentMethod: string | null;
+  createdAt: string;
+  campaign: { id: string; title: string; slug: string } | null;
+}
+
+export interface DonorDetail extends Omit<Donor, "tags"> {
+  phone: string | null;
+  anonymous: boolean;
+  avgGiftCents: number;
+  givingFrequency: "one-time" | "occasional" | "regular" | "monthly";
+  tags: DonorTag[];
+  donations: {
+    data: DonorDonation[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  };
+}
+
+export function getDonor(id: string, page = 1): Promise<DonorDetail> {
+  return request<DonorDetail>(`/api/donors/${id}?page=${page}`);
+}
+
+export function addDonorTag(
+  donorId: string,
+  name: string
+): Promise<DonorTag> {
+  return request<DonorTag>(`/api/donors/${donorId}/tags`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function removeDonorTag(
+  donorId: string,
+  tagId: string
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/api/donors/${donorId}/tags/${tagId}`, {
+    method: "DELETE",
+  });
+}
