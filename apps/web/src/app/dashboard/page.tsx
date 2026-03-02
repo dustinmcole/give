@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { getOrgStats } from "@/lib/api";
-import type { OrgStats } from "@/lib/api";
-import { useCurrentOrg } from "@/hooks/useCurrentOrg";
+import { DonationTrendChart } from "@/components/DonationTrendChart";
+import {
+  getReportingOverview,
+  type ReportingOverview,
+} from "@/lib/api";
 
-// ─── Helpers ──────────────────────────────────────────────
+const DEMO_ORG_ID = process.env.NEXT_PUBLIC_DEMO_ORG_ID ?? "";
 
 function formatCurrency(cents: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -18,55 +19,181 @@ function formatCurrency(cents: number): string {
   }).format(cents / 100);
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatPct(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
 }
-
-// ─── Skeleton Components ──────────────────────────────────
 
 function StatCardSkeleton() {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 animate-pulse">
       <div className="flex items-center justify-between mb-3">
-        <div className="h-4 bg-gray-100 rounded w-24" />
+        <div className="h-3 w-24 bg-gray-100 rounded" />
         <div className="w-10 h-10 bg-gray-100 rounded-lg" />
       </div>
-      <div className="h-8 bg-gray-100 rounded w-32 mt-2" />
-      <div className="h-3 bg-gray-100 rounded w-28 mt-2" />
+      <div className="h-7 w-28 bg-gray-100 rounded mb-1" />
+      <div className="h-3 w-20 bg-gray-100 rounded" />
     </div>
   );
 }
 
-function DonationRowSkeleton() {
+function ChartSkeleton() {
   return (
-    <div className="px-6 py-4 flex items-center justify-between animate-pulse">
-      <div className="flex items-center gap-4">
-        <div className="w-9 h-9 rounded-full bg-gray-100 flex-shrink-0" />
-        <div>
-          <div className="h-4 bg-gray-100 rounded w-32" />
-          <div className="h-3 bg-gray-100 rounded w-24 mt-1" />
+    <div className="bg-white rounded-xl border border-gray-100 p-6 animate-pulse">
+      <div className="h-4 w-40 bg-gray-100 rounded mb-6" />
+      <div className="h-[220px] bg-gray-50 rounded" />
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
+      <div className="w-16 h-16 mx-auto mb-4 bg-blue-50 rounded-full flex items-center justify-center">
+        <svg className="w-8 h-8 text-give-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h3 className="text-base font-semibold text-gray-900 mb-1">No donations yet</h3>
+      <p className="text-sm text-gray-500 max-w-xs mx-auto">
+        Once your first donation comes in, you&apos;ll see trends and analytics here.
+      </p>
+    </div>
+  );
+}
+
+interface StatCardProps {
+  label: string;
+  value: string;
+  sub: string;
+  color: string;
+  bg: string;
+  icon: React.ReactNode;
+}
+
+function StatCard({ label, value, sub, color, bg, icon }: StatCardProps) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-sm transition-shadow">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium text-gray-500">{label}</span>
+        <div className={`w-10 h-10 ${bg} rounded-lg flex items-center justify-center ${color}`}>
+          {icon}
         </div>
       </div>
-      <div className="text-right flex-shrink-0 ml-4">
-        <div className="h-4 bg-gray-100 rounded w-16" />
-        <div className="h-3 bg-gray-100 rounded w-20 mt-1" />
+      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      <div className="mt-1 text-xs text-gray-400">{sub}</div>
+    </div>
+  );
+}
+
+interface CampaignBarProps {
+  title: string;
+  raisedCents: number;
+  count: number;
+  maxCents: number;
+}
+
+function CampaignBar({ title, raisedCents, count, maxCents }: CampaignBarProps) {
+  const pct = maxCents > 0 ? (raisedCents / maxCents) * 100 : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-medium text-gray-800 truncate">{title}</span>
+          <span className="text-sm font-semibold text-gray-900 ml-2 flex-shrink-0">
+            {formatCurrency(raisedCents)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-give-primary rounded-full transition-all duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="text-xs text-gray-400 flex-shrink-0 w-16 text-right">
+            {count} gift{count !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Stat Card Config ─────────────────────────────────────
+export default function DashboardOverview() {
+  const { getToken } = useAuth();
+  const [data, setData] = useState<ReportingOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-function buildStatCards(stats: OrgStats) {
-  return [
+  useEffect(() => {
+    if (!DEMO_ORG_ID) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      try {
+        const token = await getToken();
+        if (!token) { setError("Not authenticated"); return; }
+        const overview = await getReportingOverview({ orgId: DEMO_ORG_ID, token });
+        if (!cancelled) setData(overview);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load data");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
+          <p className="mt-1 text-sm text-gray-500">Welcome back. Here&apos;s how your fundraising is doing.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => <StatCardSkeleton key={i} />)}
+        </div>
+        <ChartSkeleton />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div><h1 className="text-2xl font-bold text-gray-900">Overview</h1></div>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-700">
+          Failed to load dashboard data: {error}
+        </div>
+      </div>
+    );
+  }
+
+  if (!DEMO_ORG_ID || !data) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
+          <p className="mt-1 text-sm text-gray-500">Welcome back. Here&apos;s how your fundraising is doing.</p>
+        </div>
+        <EmptyState />
+      </div>
+    );
+  }
+
+  const { summary, dailyTrend, campaignBreakdown } = data;
+  const hasData = summary.totalDonations > 0;
+  const maxCampaignRaised = Math.max(...campaignBreakdown.map((c) => c.raisedCents), 0);
+
+  const STAT_CARDS: StatCardProps[] = [
     {
       label: "Total Raised",
-      value: formatCurrency(stats.totalRaisedCents),
+      value: formatCurrency(summary.totalRaisedCents),
+      sub: `Avg ${formatCurrency(summary.avgDonationCents)} per gift`,
       color: "text-give-primary",
       bg: "bg-blue-50",
       icon: (
@@ -77,7 +204,8 @@ function buildStatCards(stats: OrgStats) {
     },
     {
       label: "Total Donors",
-      value: stats.totalDonors.toLocaleString(),
+      value: summary.totalDonors.toLocaleString(),
+      sub: `${formatPct(summary.donorRetentionRate)} retention rate`,
       color: "text-give-accent",
       bg: "bg-emerald-50",
       icon: (
@@ -88,7 +216,8 @@ function buildStatCards(stats: OrgStats) {
     },
     {
       label: "Active Campaigns",
-      value: stats.activeCampaigns.toString(),
+      value: summary.activeCampaigns.toString(),
+      sub: `${summary.recurringDonorCount} recurring donors`,
       color: "text-amber-600",
       bg: "bg-amber-50",
       icon: (
@@ -98,8 +227,9 @@ function buildStatCards(stats: OrgStats) {
       ),
     },
     {
-      label: "Donations This Month",
-      value: stats.donationsThisMonth.toString(),
+      label: "Total Donations",
+      value: summary.totalDonations.toLocaleString(),
+      sub: `Avg ${formatCurrency(summary.avgDonationCents)} per gift`,
       color: "text-purple-600",
       bg: "bg-purple-50",
       icon: (
@@ -109,165 +239,47 @@ function buildStatCards(stats: OrgStats) {
       ),
     },
   ];
-}
-
-// ─── Page Component ───────────────────────────────────────
-
-export default function DashboardOverview() {
-  const { getToken } = useAuth();
-  const { orgId, loading: orgLoading, error: orgError } = useCurrentOrg();
-  const [stats, setStats] = useState<OrgStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsError, setStatsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!orgId) return;
-
-    setStatsLoading(true);
-    setStatsError(null);
-
-    getOrgStats(orgId, getToken)
-      .then((data) => {
-        setStats(data);
-      })
-      .catch((err: unknown) => {
-        setStatsError(err instanceof Error ? err.message : "Failed to load stats");
-      })
-      .finally(() => {
-        setStatsLoading(false);
-      });
-  }, [orgId, getToken]);
-
-  const loading = orgLoading || statsLoading;
-
-  if (orgError) {
-    return (
-      <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-sm text-red-600">
-        Error loading organization: {orgError}
-      </div>
-    );
-  }
-
-  if (statsError) {
-    return (
-      <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-sm text-red-600">
-        Error loading stats: {statsError}
-      </div>
-    );
-  }
-
-  const statCards = stats ? buildStatCards(stats) : [];
-  const recentDonations = stats?.recentDonations ?? [];
-  const hasNoDonations = !loading && stats !== null && recentDonations.length === 0;
 
   return (
     <div className="space-y-8">
-      {/* ── Page Header ────────────────────────────────── */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Welcome back. Here&apos;s how your fundraising is doing.
-        </p>
+        <p className="mt-1 text-sm text-gray-500">Welcome back. Here&apos;s how your fundraising is doing.</p>
       </div>
-
-      {/* ── Stat Cards ─────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-          : statCards.map((card) => (
-              <div
-                key={card.label}
-                className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-gray-500">
-                    {card.label}
-                  </span>
-                  <div
-                    className={`w-10 h-10 ${card.bg} rounded-lg flex items-center justify-center ${card.color}`}
-                  >
-                    {card.icon}
-                  </div>
-                </div>
-                <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+        {STAT_CARDS.map((card) => <StatCard key={card.label} {...card} />)}
+      </div>
+      {!hasData && <EmptyState />}
+      {hasData && (
+        <>
+          <div className="bg-white rounded-xl border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-base font-semibold text-gray-900">Donation Trends</h2>
+              <span className="text-xs text-gray-400">Last 30 days</span>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">Daily donation totals</p>
+            <DonationTrendChart data={dailyTrend} />
+          </div>
+          {campaignBreakdown.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-100 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">Campaign Breakdown</h2>
+              <div className="space-y-4">
+                {campaignBreakdown
+                  .sort((a, b) => b.raisedCents - a.raisedCents)
+                  .map((c) => (
+                    <CampaignBar
+                      key={c.campaignId}
+                      title={c.title}
+                      raisedCents={c.raisedCents}
+                      count={c.count}
+                      maxCents={maxCampaignRaised}
+                    />
+                  ))}
               </div>
-            ))}
-      </div>
-
-      {/* ── Recent Donations ───────────────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-100">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">
-            Recent Donations
-          </h2>
-          <Link
-            href="/dashboard/donations"
-            className="text-sm text-give-primary font-medium hover:underline"
-          >
-            View all
-          </Link>
-        </div>
-
-        {loading ? (
-          <div className="divide-y divide-gray-50">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <DonationRowSkeleton key={i} />
-            ))}
-          </div>
-        ) : hasNoDonations ? (
-          <div className="px-6 py-12 text-center">
-            <p className="text-gray-500 text-sm mb-4">
-              No donations yet. Share your campaign to start receiving donations!
-            </p>
-            <Link
-              href="/dashboard/campaigns/new"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-give-primary text-white text-sm font-semibold hover:bg-give-primary-dark transition-colors"
-            >
-              Create a Campaign
-            </Link>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {recentDonations.map((d) => {
-              const donorName =
-                d.donor
-                  ? d.donor.anonymous
-                    ? "Anonymous"
-                    : `${d.donor.firstName} ${d.donor.lastName}`
-                  : (d.donorName ?? "Unknown");
-              const campaignTitle =
-                d.campaign ? d.campaign.title : "Unknown Campaign";
-
-              return (
-                <div
-                  key={d.id}
-                  className="px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-give-primary/10 flex items-center justify-center text-sm font-bold text-give-primary flex-shrink-0">
-                      {donorName.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">
-                        {donorName}
-                      </div>
-                      <div className="text-xs text-gray-400 truncate">
-                        {campaignTitle}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0 ml-4">
-                    <div className="text-sm font-semibold text-gray-900">
-                      {formatCurrency(d.amountCents)}
-                    </div>
-                    <div className="text-xs text-gray-400">{formatDate(d.createdAt)}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
