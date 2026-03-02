@@ -1,6 +1,16 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "@give/db";
+import {
+  badRequest,
+  validationError,
+  notFound,
+  conflict,
+  internalError,
+  logServerError,
+  logClientError,
+} from "../lib/errors.js";
+import { trimString, stripHtml } from "../lib/sanitize.js";
 
 export const campaignRoutes = new Hono();
 
@@ -16,7 +26,7 @@ const createCampaignSchema = z.object({
       /^[a-z0-9][a-z0-9-]*[a-z0-9]$/,
       "Slug must be lowercase alphanumeric with hyphens"
     ),
-  description: z.string().optional(),
+  description: z.string().max(10000).optional(),
   type: z.enum(["donation", "peer_to_peer", "event", "membership"]).default("donation"),
   status: z.enum(["draft", "active", "paused", "ended"]).default("draft"),
   goalAmountCents: z.number().int().positive().optional(),
@@ -43,7 +53,7 @@ const updateCampaignSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/)
     .optional(),
-  description: z.string().optional(),
+  description: z.string().max(10000).optional(),
   type: z.enum(["donation", "peer_to_peer", "event", "membership"]).optional(),
   status: z.enum(["draft", "active", "paused", "ended"]).optional(),
   goalAmountCents: z.number().int().positive().nullable().optional(),
@@ -83,15 +93,25 @@ const CAMPAIGN_STATUS_MAP = {
 campaignRoutes.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) {
-    return c.json({ error: "Invalid JSON body" }, 400);
+    const err = badRequest("Request body must be valid JSON");
+    return c.json(err, 400);
   }
+
+  // Sanitize string inputs
+  if (typeof body.title === "string") body.title = trimString(body.title);
+  if (typeof body.slug === "string") body.slug = body.slug.trim().toLowerCase();
+  if (typeof body.description === "string") body.description = stripHtml(body.description);
 
   const parsed = createCampaignSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      400
-    );
+    const err = validationError(parsed.error.flatten());
+    logClientError("Campaign creation validation failed", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 400,
+      details: parsed.error.flatten(),
+    });
+    return c.json(err, 400);
   }
 
   const input = parsed.data;
@@ -103,7 +123,8 @@ campaignRoutes.post("/", async (c) => {
     });
 
     if (!org) {
-      return c.json({ error: "Organization not found" }, 404);
+      const err = notFound("Organization");
+      return c.json(err, 404);
     }
 
     // Check for slug uniqueness within the org
@@ -117,10 +138,10 @@ campaignRoutes.post("/", async (c) => {
     });
 
     if (existingCampaign) {
-      return c.json(
-        { error: "A campaign with this slug already exists for this organization" },
-        409
+      const err = conflict(
+        "A campaign with this slug already exists for this organization"
       );
+      return c.json(err, 409);
     }
 
     const campaign = await prisma.campaign.create({
@@ -146,8 +167,14 @@ campaignRoutes.post("/", async (c) => {
 
     return c.json(campaign, 201);
   } catch (err) {
-    console.error("Error creating campaign:", err);
-    return c.json({ error: "Failed to create campaign" }, 500);
+    logServerError("Error creating campaign", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 500,
+      error: err,
+    });
+    const body = internalError("Failed to create campaign");
+    return c.json(body, 500);
   }
 });
 
@@ -177,7 +204,8 @@ campaignRoutes.get("/:id", async (c) => {
     });
 
     if (!campaign) {
-      return c.json({ error: "Campaign not found" }, 404);
+      const err = notFound("Campaign");
+      return c.json(err, 404);
     }
 
     // Aggregate donation stats
@@ -200,8 +228,14 @@ campaignRoutes.get("/:id", async (c) => {
       },
     });
   } catch (err) {
-    console.error("Error fetching campaign:", err);
-    return c.json({ error: "Failed to fetch campaign" }, 500);
+    logServerError("Error fetching campaign", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 500,
+      error: err,
+    });
+    const body = internalError("Failed to fetch campaign");
+    return c.json(body, 500);
   }
 });
 
@@ -212,15 +246,19 @@ campaignRoutes.patch("/:id", async (c) => {
 
   const body = await c.req.json().catch(() => null);
   if (!body) {
-    return c.json({ error: "Invalid JSON body" }, 400);
+    const err = badRequest("Request body must be valid JSON");
+    return c.json(err, 400);
   }
+
+  // Sanitize string inputs
+  if (typeof body.title === "string") body.title = trimString(body.title);
+  if (typeof body.slug === "string") body.slug = body.slug.trim().toLowerCase();
+  if (typeof body.description === "string") body.description = stripHtml(body.description);
 
   const parsed = updateCampaignSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      400
-    );
+    const err = validationError(parsed.error.flatten());
+    return c.json(err, 400);
   }
 
   const input = parsed.data;
@@ -230,7 +268,8 @@ campaignRoutes.patch("/:id", async (c) => {
     const existing = await prisma.campaign.findUnique({ where: { id } });
 
     if (!existing) {
-      return c.json({ error: "Campaign not found" }, 404);
+      const err = notFound("Campaign");
+      return c.json(err, 404);
     }
 
     // If slug is being changed, check uniqueness within the org
@@ -245,10 +284,10 @@ campaignRoutes.patch("/:id", async (c) => {
       });
 
       if (slugConflict) {
-        return c.json(
-          { error: "A campaign with this slug already exists for this organization" },
-          409
+        const err = conflict(
+          "A campaign with this slug already exists for this organization"
         );
+        return c.json(err, 409);
       }
     }
 
@@ -282,8 +321,14 @@ campaignRoutes.patch("/:id", async (c) => {
 
     return c.json(campaign);
   } catch (err) {
-    console.error("Error updating campaign:", err);
-    return c.json({ error: "Failed to update campaign" }, 500);
+    logServerError("Error updating campaign", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 500,
+      error: err,
+    });
+    const body = internalError("Failed to update campaign");
+    return c.json(body, 500);
   }
 });
 
@@ -328,11 +373,13 @@ campaignRoutes.get("/:id/public", async (c) => {
     });
 
     if (!campaign) {
-      return c.json({ error: "Campaign not found" }, 404);
+      const err = notFound("Campaign");
+      return c.json(err, 404);
     }
 
     if (campaign.status === "DRAFT") {
-      return c.json({ error: "Campaign is not published" }, 404);
+      const err = notFound("Campaign");
+      return c.json(err, 404);
     }
 
     // Get recent donors for donor roll (if enabled)
@@ -384,7 +431,13 @@ campaignRoutes.get("/:id/public", async (c) => {
         : null,
     });
   } catch (err) {
-    console.error("Error fetching public campaign:", err);
-    return c.json({ error: "Failed to fetch campaign" }, 500);
+    logServerError("Error fetching public campaign", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 500,
+      error: err,
+    });
+    const body = internalError("Failed to fetch campaign");
+    return c.json(body, 500);
   }
 });

@@ -13,6 +13,7 @@ import { stripeRoutes } from "./routes/stripe.js";
 import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
 import { clerkAuth, requireOrgAccess } from "./middleware/auth.js";
 import type { AuthVariables } from "./middleware/auth.js";
+import { internalError, logServerError } from "./lib/errors.js";
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -98,13 +99,27 @@ app.route("/api/donors", donorRoutes);
 
 // ─── 404 catch-all ────────────────────────────────────────
 app.notFound((c) => {
-  return c.json({ error: "Not found" }, 404);
+  return c.json(
+    {
+      error: "NOT_FOUND",
+      message: "The requested resource does not exist",
+      statusCode: 404,
+    },
+    404
+  );
 });
 
 // ─── Global error handler ─────────────────────────────────
+// Catches any unhandled exceptions thrown from route handlers.
+// Never leaks stack traces to clients; logs full details server-side.
 app.onError((err, c) => {
-  console.error("Unhandled error:", err);
-  return c.json({ error: "Internal server error" }, 500);
+  logServerError("Unhandled exception", {
+    path: c.req.path,
+    method: c.req.method,
+    error: err,
+  });
+  const body = internalError();
+  return c.json(body, body.statusCode as 500);
 });
 
 // ─── Start server ─────────────────────────────────────────
