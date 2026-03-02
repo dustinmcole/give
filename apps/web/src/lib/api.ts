@@ -2,13 +2,44 @@ import type { CreateDonationInput } from "@give/shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+// ─── Auth Token Resolver ──────────────────────────────────
+//
+// Accepts an optional token getter (e.g. Clerk's `getToken()` from
+// `useAuth()` in client components, or a resolved token string from
+// server components). When omitted the request is unauthenticated,
+// which is correct for public endpoints (donation page, public campaign).
+
+export type TokenGetter =
+  | (() => Promise<string | null>)
+  | string
+  | null
+  | undefined;
+
+async function resolveToken(token: TokenGetter): Promise<string | null> {
+  if (!token) return null;
+  if (typeof token === "string") return token;
+  return token();
+}
+
+async function request<T>(
+  path: string,
+  options?: RequestInit & { token?: TokenGetter }
+): Promise<T> {
+  const { token, ...fetchOptions } = options ?? {};
+  const resolvedToken = await resolveToken(token);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(fetchOptions.headers as Record<string, string> | undefined),
+  };
+
+  if (resolvedToken) {
+    headers["Authorization"] = `Bearer ${resolvedToken}`;
+  }
+
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-    ...options,
+    ...fetchOptions,
+    headers,
   });
 
   if (!res.ok) {
@@ -44,14 +75,20 @@ export interface Campaign {
   };
 }
 
+/** Public — no token needed (donation page loads campaign data) */
 export function getDonationCampaign(id: string): Promise<Campaign> {
   return request<Campaign>(`/api/campaigns/${id}`);
 }
 
-export function listCampaigns(orgId: string): Promise<Campaign[]> {
-  return request<Campaign[]>(`/api/orgs/${orgId}/campaigns`);
+/** Protected — requires auth token */
+export function listCampaigns(
+  orgId: string,
+  token: TokenGetter
+): Promise<Campaign[]> {
+  return request<{ data: Campaign[] }>(`/api/orgs/${orgId}/campaigns`, { token }).then(
+    (r) => r.data
+  );
 }
-
 
 export interface CreateCampaignInput {
   title: string;
@@ -90,24 +127,33 @@ export interface UpdateCampaignInput {
   endDate?: string | null;
 }
 
+/** Public — no token needed (donation page loads campaign) */
 export function getCampaign(id: string): Promise<Campaign> {
   return request<Campaign>(`/api/campaigns/${id}`);
 }
 
-export function createCampaign(input: CreateCampaignInput): Promise<Campaign> {
+/** Protected — requires auth token */
+export function createCampaign(
+  input: CreateCampaignInput,
+  token: TokenGetter
+): Promise<Campaign> {
   return request<Campaign>("/api/campaigns", {
     method: "POST",
     body: JSON.stringify(input),
+    token,
   });
 }
 
+/** Protected — requires auth token */
 export function updateCampaign(
   id: string,
-  input: UpdateCampaignInput
+  input: UpdateCampaignInput,
+  token: TokenGetter
 ): Promise<Campaign> {
   return request<Campaign>(`/api/campaigns/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+    token,
   });
 }
 
@@ -165,6 +211,7 @@ export interface CreateDonationResponse {
   clientSecret: string;
 }
 
+/** Public — donors are anonymous visitors */
 export function createDonation(
   input: CreateDonationInput
 ): Promise<CreateDonationResponse> {
@@ -174,12 +221,17 @@ export function createDonation(
   });
 }
 
+/** Public — confirmation page (no auth needed) */
 export function getDonation(id: string): Promise<DonationDetail> {
   return request<DonationDetail>(`/api/donations/${id}`);
 }
 
-export function listDonations(orgId: string): Promise<Donation[]> {
-  return request<Donation[]>(`/api/orgs/${orgId}/donations`);
+/** Protected — org dashboard lists donations */
+export function listDonations(
+  orgId: string,
+  token: TokenGetter
+): Promise<Donation[]> {
+  return request<Donation[]>(`/api/donations?orgId=${orgId}`, { token });
 }
 
 // ─── Donor ───────────────────────────────────────────────
@@ -192,28 +244,56 @@ export interface Donor {
   lastName: string;
   totalGivenCents: number;
   donationCount: number;
-  firstDonationAt: string;
-  lastDonationAt: string;
+  firstDonationAt: string | null;
+  lastDonationAt: string | null;
   tags: string[];
   createdAt: string;
 }
 
-export function listDonors(orgId: string): Promise<Donor[]> {
-  return request<Donor[]>(`/api/orgs/${orgId}/donors`);
+/** Protected — org dashboard */
+export function listDonors(
+  orgId: string,
+  token: TokenGetter
+): Promise<Donor[]> {
+  return request<{ data: Donor[] }>(`/api/orgs/${orgId}/donors`, { token }).then(
+    (r) => r.data
+  );
 }
 
 // ─── Organization Stats ──────────────────────────────────
+
+/** Donation shape returned by the org stats endpoint (includes nested donor/campaign) */
+export interface DashboardDonation extends Omit<Donation, "donorName" | "donorEmail"> {
+  donorName?: string;
+  donorEmail?: string;
+  donor?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    anonymous: boolean;
+  };
+  campaign?: {
+    id: string;
+    title: string;
+    slug: string;
+  };
+}
 
 export interface OrgStats {
   totalRaisedCents: number;
   totalDonors: number;
   activeCampaigns: number;
   donationsThisMonth: number;
-  recentDonations: Donation[];
+  recentDonations: DashboardDonation[];
 }
 
-export function getOrgStats(orgId: string): Promise<OrgStats> {
-  return request<OrgStats>(`/api/orgs/${orgId}/stats`);
+/** Protected — org dashboard */
+export function getOrgStats(
+  orgId: string,
+  token: TokenGetter
+): Promise<OrgStats> {
+  return request<OrgStats>(`/api/orgs/${orgId}/stats`, { token });
 }
 
 // ─── Organization ────────────────────────────────────────
@@ -237,6 +317,7 @@ export interface CreateOrganizationResponse {
   onboardingUrl: string;
 }
 
+/** Public — onboarding (user account may not exist in DB yet) */
 export function createOrganization(
   input: CreateOrganizationInput
 ): Promise<CreateOrganizationResponse> {
@@ -277,13 +358,20 @@ export interface UpdateOrgInput {
   status?: "ONBOARDING" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
 }
 
-export function getOrg(id: string): Promise<Org> {
-  return request<Org>(`/api/orgs/${id}`);
+/** Protected — org dashboard */
+export function getOrg(id: string, token: TokenGetter): Promise<Org> {
+  return request<Org>(`/api/orgs/${id}`, { token });
 }
 
-export function updateOrg(id: string, input: UpdateOrgInput): Promise<Org> {
+/** Protected — org dashboard */
+export function updateOrg(
+  id: string,
+  input: UpdateOrgInput,
+  token: TokenGetter
+): Promise<Org> {
   return request<Org>(`/api/orgs/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+    token,
   });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { getOrg, updateOrg, type Org, type UpdateOrgInput } from "@/lib/api";
 
 // ── Hardcoded demo org ID — replace with session/context once auth lands ──────
@@ -208,6 +209,7 @@ function orgToForm(org: Org): FormState {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const { getToken } = useAuth();
   const [org, setOrg] = useState<Org | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -225,7 +227,7 @@ export default function SettingsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getOrg(DEMO_ORG_ID)
+    getOrg(DEMO_ORG_ID, getToken)
       .then((data: Org) => {
         if (!cancelled) {
           setOrg(data);
@@ -246,7 +248,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [getToken]);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -265,7 +267,7 @@ export default function SettingsPage() {
         defaultCurrency: form.defaultCurrency,
         coverFeesDefault: form.coverFeesDefault,
       };
-      const updated = await updateOrg(org.id, payload);
+      const updated = await updateOrg(org.id, payload, getToken);
       setOrg(updated);
       setForm(orgToForm(updated));
       addToast("success", "Settings saved successfully.");
@@ -283,7 +285,7 @@ export default function SettingsPage() {
     if (!org) return;
     setDeactivating(true);
     try {
-      const updated = await updateOrg(org.id, { status: "DEACTIVATED" });
+      const updated = await updateOrg(org.id, { status: "DEACTIVATED" }, getToken);
       setOrg(updated);
       setForm(orgToForm(updated));
       setShowDeactivateModal(false);

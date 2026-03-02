@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
 import { createCampaign } from "@/lib/api";
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -175,6 +176,7 @@ const DEFAULT_FORM: FormState = {
 
 export default function NewCampaignPage() {
   const router = useRouter();
+  const { getToken } = useAuth();
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -273,7 +275,7 @@ export default function NewCampaignPage() {
         allowCustomAmount: form.allowCustomAmount,
         startDate: form.startDate || null,
         endDate: form.endDate || null,
-      });
+      }, getToken);
 
       router.push("/dashboard/campaigns?created=1");
     } catch (err) {

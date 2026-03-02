@@ -169,6 +169,160 @@ orgRoutes.get("/:idOrSlug/campaigns", async (c) => {
   }
 });
 
+// ─── GET /me — Resolve Current User's Org ─────────────────
+// Expects X-Clerk-User-Id header forwarded by the Next.js /api/me/org route.
+
+orgRoutes.get("/me", async (c) => {
+  const clerkUserId = c.req.header("x-clerk-user-id");
+
+  if (!clerkUserId) {
+    return c.json({ error: "Missing x-clerk-user-id header" }, 400);
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { clerkId: clerkUserId },
+      include: {
+        memberships: {
+          include: {
+            org: { select: { id: true, name: true, slug: true } },
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user || user.memberships.length === 0) {
+      return c.json({ error: "No organization found for this user" }, 404);
+    }
+
+    return c.json(user.memberships[0]!.org);
+  } catch (err) {
+    console.error("Error resolving user org:", err);
+    return c.json({ error: "Failed to resolve user org" }, 500);
+  }
+});
+
+// ─── GET /:id/stats — Dashboard Stats ────────────────────
+
+orgRoutes.get("/:id/stats", async (c) => {
+  const id = c.req.param("id");
+
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [totalRaised, totalDonors, activeCampaigns, donationsThisMonth, recentDonations] =
+      await Promise.all([
+        prisma.donation.aggregate({
+          where: { orgId: id, status: "SUCCEEDED" },
+          _sum: { amountCents: true },
+        }),
+        prisma.donor.count({ where: { orgId: id } }),
+        prisma.campaign.count({ where: { orgId: id, status: "ACTIVE" } }),
+        prisma.donation.count({
+          where: {
+            orgId: id,
+            status: "SUCCEEDED",
+            createdAt: { gte: startOfMonth },
+          },
+        }),
+        prisma.donation.findMany({
+          where: { orgId: id, status: "SUCCEEDED" },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          include: {
+            donor: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                anonymous: true,
+              },
+            },
+            campaign: {
+              select: { id: true, title: true, slug: true },
+            },
+          },
+        }),
+      ]);
+
+    return c.json({
+      totalRaisedCents: totalRaised._sum.amountCents ?? 0,
+      totalDonors,
+      activeCampaigns,
+      donationsThisMonth,
+      recentDonations,
+    });
+  } catch (err) {
+    console.error("Error fetching org stats:", err);
+    return c.json({ error: "Failed to fetch org stats" }, 500);
+  }
+});
+
+// ─── GET /:id/donors — List Donors for Org ────────────────
+
+orgRoutes.get("/:id/donors", async (c) => {
+  const id = c.req.param("id");
+  const page = Math.max(1, parseInt(c.req.query("page") ?? "1", 10));
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query("limit") ?? "50", 10)));
+  const skip = (page - 1) * limit;
+
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    const [donors, total] = await Promise.all([
+      prisma.donor.findMany({
+        where: { orgId: id },
+        include: { tags: { select: { name: true } } },
+        orderBy: { totalGivenCents: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.donor.count({ where: { orgId: id } }),
+    ]);
+
+    const data = donors.map((d) => ({
+      id: d.id,
+      orgId: d.orgId,
+      email: d.email,
+      firstName: d.firstName,
+      lastName: d.lastName,
+      totalGivenCents: d.totalGivenCents,
+      donationCount: d.donationCount,
+      firstDonationAt: d.firstDonationAt?.toISOString() ?? null,
+      lastDonationAt: d.lastDonationAt?.toISOString() ?? null,
+      tags: d.tags.map((t) => t.name),
+      createdAt: d.createdAt.toISOString(),
+    }));
+
+    return c.json({
+      data,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    console.error("Error listing donors:", err);
+    return c.json({ error: "Failed to list donors" }, 500);
+  }
+});
+
 // ─── PATCH /:id — Update Organization ────────────────────
 
 const updateOrgSchema = z.object({
