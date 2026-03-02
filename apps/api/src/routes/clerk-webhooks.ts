@@ -1,8 +1,18 @@
 import { Hono } from "hono";
 import { Webhook } from "svix";
 import { prisma } from "@give/db";
+import {
+  badRequest,
+  internalError,
+  logServerError,
+  logClientError,
+} from "../lib/errors.js";
 
 export const clerkWebhookRoutes = new Hono();
+
+// ─── In-memory processed event IDs (idempotency) ─────────
+// Prevents double-processing if Clerk retries a webhook event.
+const processedEventIds = new Set<string>();
 
 // ─── Clerk Webhook Event Types ────────────────────────────
 
@@ -49,12 +59,20 @@ type ClerkWebhookEvent =
   | ClerkUserDeletedEvent;
 
 // ─── POST / — Clerk Webhook Handler ──────────────────────
+// Resilience rules:
+//  1. Always return 200 after successful signature verification — never 5xx
+//  2. Catch errors per-event so one bad event doesn't block others
+//  3. Skip already-processed event IDs (idempotency)
 
 clerkWebhookRoutes.post("/", async (c) => {
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error("CLERK_WEBHOOK_SECRET is not configured");
-    return c.json({ error: "Webhook not configured" }, 500);
+    logServerError("CLERK_WEBHOOK_SECRET is not configured", {
+      path: c.req.path,
+      method: c.req.method,
+    });
+    const body = internalError("Webhook not configured");
+    return c.json(body, 500);
   }
 
   // Extract Svix signature headers
@@ -63,7 +81,13 @@ clerkWebhookRoutes.post("/", async (c) => {
   const svixSignature = c.req.header("svix-signature");
 
   if (!svixId || !svixTimestamp || !svixSignature) {
-    return c.json({ error: "Missing Svix signature headers" }, 400);
+    const err = badRequest("Missing Svix signature headers");
+    logClientError("Clerk webhook missing Svix headers", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 400,
+    });
+    return c.json(err, 400);
   }
 
   // Verify webhook signature
@@ -79,10 +103,23 @@ clerkWebhookRoutes.post("/", async (c) => {
     }) as ClerkWebhookEvent;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("Clerk webhook signature verification failed:", message);
-    return c.json({ error: "Invalid signature" }, 400);
+    logClientError("Clerk webhook signature verification failed", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 400,
+      error: message,
+    });
+    const body = badRequest("Invalid signature");
+    return c.json(body, 400);
   }
 
+  // Idempotency: skip already-processed events
+  if (processedEventIds.has(svixId)) {
+    console.log(`Clerk webhook: skipping already-processed event ${svixId}`);
+    return c.json({ received: true, skipped: true });
+  }
+
+  // Dispatch — catch per-event errors so we always return 200
   try {
     switch (event.type) {
       case "user.created":
@@ -103,12 +140,21 @@ clerkWebhookRoutes.post("/", async (c) => {
         // Log unhandled event types, but return 200
         console.log(`Unhandled Clerk webhook event type: ${(event as { type: string }).type}`);
     }
-
-    return c.json({ received: true });
   } catch (err) {
-    console.error(`Error handling Clerk webhook ${event.type}:`, err);
-    return c.json({ error: "Webhook handler failed" }, 500);
+    // Log the error but do NOT propagate — webhook handlers must never return 5xx
+    logServerError(`Error handling Clerk webhook ${event.type}`, {
+      path: c.req.path,
+      method: c.req.method,
+      svixId,
+      eventType: event.type,
+      error: err,
+    });
   }
+
+  // Mark as processed
+  processedEventIds.add(svixId);
+
+  return c.json({ received: true });
 });
 
 // ─── Shared Upsert Logic ──────────────────────────────────

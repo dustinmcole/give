@@ -13,8 +13,22 @@ import {
   buildDonationReceiptText,
 } from "../emails/donation-receipt.js";
 import type Stripe from "stripe";
+import {
+  badRequest,
+  validationError,
+  notFound,
+  internalError,
+  logServerError,
+  logClientError,
+} from "../lib/errors.js";
+import { normalizeEmail } from "../lib/sanitize.js";
 
 export const stripeRoutes = new Hono();
+
+// ─── In-memory processed event IDs (idempotency) ─────────
+// Prevents double-processing if Stripe retries a webhook event.
+// MVP: in-memory set. For multi-instance, move to Redis or DB.
+const processedEventIds = new Set<string>();
 
 // ─── Validation Schemas ───────────────────────────────────
 
@@ -28,15 +42,17 @@ const connectSchema = z.object({
 stripeRoutes.post("/connect", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) {
-    return c.json({ error: "Invalid JSON body" }, 400);
+    const err = badRequest("Request body must be valid JSON");
+    return c.json(err, 400);
   }
+
+  // Sanitize
+  if (typeof body.email === "string") body.email = normalizeEmail(body.email);
 
   const parsed = connectSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      400
-    );
+    const err = validationError(parsed.error.flatten());
+    return c.json(err, 400);
   }
 
   const { orgId, email } = parsed.data;
@@ -47,7 +63,8 @@ stripeRoutes.post("/connect", async (c) => {
     });
 
     if (!org) {
-      return c.json({ error: "Organization not found" }, 404);
+      const err = notFound("Organization");
+      return c.json(err, 404);
     }
 
     // If org already has a Stripe account, just generate a new onboarding link
@@ -91,8 +108,14 @@ stripeRoutes.post("/connect", async (c) => {
       201
     );
   } catch (err) {
-    console.error("Error creating Stripe Connect account:", err);
-    return c.json({ error: "Failed to create Stripe Connect account" }, 500);
+    logServerError("Error creating Stripe Connect account", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 500,
+      error: err,
+    });
+    const body = internalError("Failed to create Stripe Connect account");
+    return c.json(body, 500);
   }
 });
 
@@ -107,14 +130,13 @@ stripeRoutes.get("/connect/refresh/:orgId", async (c) => {
     });
 
     if (!org) {
-      return c.json({ error: "Organization not found" }, 404);
+      const err = notFound("Organization");
+      return c.json(err, 404);
     }
 
     if (!org.stripeAccountId) {
-      return c.json(
-        { error: "Organization has no Stripe Connect account" },
-        400
-      );
+      const err = badRequest("Organization has no Stripe Connect account");
+      return c.json(err, 400);
     }
 
     const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
@@ -126,24 +148,45 @@ stripeRoutes.get("/connect/refresh/:orgId", async (c) => {
 
     return c.json({ onboardingUrl: accountLink.url });
   } catch (err) {
-    console.error("Error refreshing onboarding link:", err);
-    return c.json({ error: "Failed to refresh onboarding link" }, 500);
+    logServerError("Error refreshing onboarding link", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 500,
+      error: err,
+    });
+    const body = internalError("Failed to refresh onboarding link");
+    return c.json(body, 500);
   }
 });
 
 // ─── POST /webhooks — Stripe Webhook Handler ──────────────
+// Resilience rules:
+//  1. Always return 200 after successful signature verification — never 5xx
+//  2. Catch errors per-event so one bad event doesn't block others
+//  3. Skip already-processed event IDs (idempotency)
 
 stripeRoutes.post("/webhooks", async (c) => {
   const signature = c.req.header("stripe-signature");
 
   if (!signature) {
-    return c.json({ error: "Missing stripe-signature header" }, 400);
+    const err = badRequest("Missing stripe-signature header");
+    logClientError("Stripe webhook missing signature", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 400,
+    });
+    return c.json(err, 400);
   }
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error("STRIPE_WEBHOOK_SECRET not configured");
-    return c.json({ error: "Webhook not configured" }, 500);
+    logServerError("STRIPE_WEBHOOK_SECRET not configured", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 500,
+    });
+    const body = internalError("Webhook not configured");
+    return c.json(body, 500);
   }
 
   let event: Stripe.Event;
@@ -154,10 +197,23 @@ stripeRoutes.post("/webhooks", async (c) => {
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("Webhook signature verification failed:", message);
-    return c.json({ error: "Invalid signature" }, 400);
+    logClientError("Stripe webhook signature verification failed", {
+      path: c.req.path,
+      method: c.req.method,
+      statusCode: 400,
+      error: message,
+    });
+    const body = badRequest("Invalid signature");
+    return c.json(body, 400);
   }
 
+  // Idempotency: skip already-processed events
+  if (processedEventIds.has(event.id)) {
+    console.log(`Stripe webhook: skipping already-processed event ${event.id}`);
+    return c.json({ received: true, skipped: true });
+  }
+
+  // Dispatch — catch per-event errors so we always return 200
   try {
     switch (event.type) {
       case "payment_intent.succeeded":
@@ -180,12 +236,21 @@ stripeRoutes.post("/webhooks", async (c) => {
         // Log unhandled event types for debugging, but return 200
         console.log(`Unhandled webhook event type: ${event.type}`);
     }
-
-    return c.json({ received: true });
   } catch (err) {
-    console.error(`Error handling webhook ${event.type}:`, err);
-    return c.json({ error: "Webhook handler failed" }, 500);
+    // Log the error but do NOT propagate — webhook handlers must never return 5xx
+    logServerError(`Error handling Stripe webhook ${event.type}`, {
+      path: c.req.path,
+      method: c.req.method,
+      eventId: event.id,
+      eventType: event.type,
+      error: err,
+    });
   }
+
+  // Mark as processed only after successful dispatch attempt
+  processedEventIds.add(event.id);
+
+  return c.json({ received: true });
 });
 
 // ─── Webhook Handlers ─────────────────────────────────────
@@ -256,7 +321,9 @@ async function sendReceiptEmail(
     });
 
     if (!donation) {
-      console.error(`sendReceiptEmail: donation ${donationId} not found`);
+      logServerError(`sendReceiptEmail: donation ${donationId} not found`, {
+        donationId,
+      });
       return;
     }
 
@@ -302,10 +369,10 @@ async function sendReceiptEmail(
     });
 
     if (error) {
-      console.error(
-        `Failed to send receipt email for donation ${donationId}:`,
-        error
-      );
+      logServerError(`Failed to send receipt email for donation ${donationId}`, {
+        donationId,
+        error,
+      });
       return;
     }
 
@@ -320,9 +387,9 @@ async function sendReceiptEmail(
     );
   } catch (err) {
     // Never propagate — a failed email must not fail the webhook
-    console.error(
-      `Unexpected error sending receipt email for donation ${donationId}:`,
-      err
+    logServerError(
+      `Unexpected error sending receipt email for donation ${donationId}`,
+      { donationId, error: err }
     );
   }
 }
