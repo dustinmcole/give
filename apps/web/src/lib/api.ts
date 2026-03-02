@@ -163,6 +163,7 @@ export interface DonationDetail {
 export interface CreateDonationResponse {
   donationId: string;
   clientSecret: string;
+  stripeAccountId: string;
 }
 
 export function createDonation(

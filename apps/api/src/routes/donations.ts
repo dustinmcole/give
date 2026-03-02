@@ -1,35 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { prisma, Prisma } from "@give/db";
+import { prisma } from "@give/db";
 import type { PlanTier as PrismaPlanTier } from "@give/db";
 import { calculateFees } from "../lib/fees.js";
 import { getApplicationFeeAmount } from "../lib/fees.js";
 import { createPaymentIntent } from "../lib/stripe.js";
 import type { PlanTier, PaymentMethod } from "@give/shared";
-import { requireOrgAccess } from "../middleware/auth.js";
-import type { AuthVariables } from "../middleware/auth.js";
 
-export const donationRoutes = new Hono<{ Variables: AuthVariables }>();
-
-// ─── CSV Helpers ──────────────────────────────────────────
-
-function csvField(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "";
-  const str = String(value);
-  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function buildCsvRow(fields: (string | number | null | undefined)[]): string {
-  return fields.map(csvField).join(",");
-}
-
-function formatDateYMD(date: Date | string | null | undefined): string {
-  if (!date) return "";
-  return new Date(date).toISOString().slice(0, 10);
-}
+export const donationRoutes = new Hono();
 
 // ─── Validation Schemas ───────────────────────────────────
 
@@ -59,22 +37,6 @@ const listDonationsSchema = z.object({
   orgId: z.string().min(1),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  campaignId: z.string().optional(),
-  status: z
-    .enum(["PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "REFUNDED", "DISPUTED"])
-    .optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-});
-
-const exportDonationsSchema = z.object({
-  orgId: z.string().min(1),
-  campaignId: z.string().optional(),
-  status: z
-    .enum(["PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "REFUNDED", "DISPUTED"])
-    .optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
 });
 
 // ─── Map shared types to Prisma enums ─────────────────────
@@ -219,6 +181,7 @@ donationRoutes.post("/", async (c) => {
       {
         donationId: donation.id,
         clientSecret: paymentIntent.client_secret,
+        stripeAccountId: org.stripeAccountId,
         fees: {
           donationAmount: fees.donationAmount,
           processingFee: fees.processingFee,
@@ -292,10 +255,6 @@ donationRoutes.get("/", async (c) => {
     orgId: c.req.query("orgId"),
     page: c.req.query("page"),
     limit: c.req.query("limit"),
-    campaignId: c.req.query("campaignId"),
-    status: c.req.query("status"),
-    startDate: c.req.query("startDate"),
-    endDate: c.req.query("endDate"),
   });
 
   if (!query.success) {
@@ -305,28 +264,13 @@ donationRoutes.get("/", async (c) => {
     );
   }
 
-  const { orgId, page, limit, campaignId, status, startDate, endDate } =
-    query.data;
+  const { orgId, page, limit } = query.data;
   const skip = (page - 1) * limit;
-
-  const where: Prisma.DonationWhereInput = {
-    orgId,
-    ...(campaignId ? { campaignId } : {}),
-    ...(status ? { status } : {}),
-    ...(startDate || endDate
-      ? {
-          createdAt: {
-            ...(startDate ? { gte: new Date(startDate) } : {}),
-            ...(endDate ? { lte: new Date(endDate) } : {}),
-          },
-        }
-      : {}),
-  };
 
   try {
     const [donations, total] = await Promise.all([
       prisma.donation.findMany({
-        where,
+        where: { orgId },
         include: {
           donor: {
             select: {
@@ -349,7 +293,7 @@ donationRoutes.get("/", async (c) => {
         skip,
         take: limit,
       }),
-      prisma.donation.count({ where }),
+      prisma.donation.count({ where: { orgId } }),
     ]);
 
     return c.json({
@@ -364,155 +308,5 @@ donationRoutes.get("/", async (c) => {
   } catch (err) {
     console.error("Error listing donations:", err);
     return c.json({ error: "Failed to list donations" }, 500);
-  }
-});
-
-// ─── GET /export — Export Donations as CSV ───────────────
-
-donationRoutes.get("/export", requireOrgAccess("orgId"), async (c) => {
-  const query = exportDonationsSchema.safeParse({
-    orgId: c.req.query("orgId"),
-    campaignId: c.req.query("campaignId"),
-    status: c.req.query("status"),
-    startDate: c.req.query("startDate"),
-    endDate: c.req.query("endDate"),
-  });
-
-  if (!query.success) {
-    return c.json(
-      { error: "Validation failed", details: query.error.flatten() },
-      400
-    );
-  }
-
-  const { orgId, campaignId, status, startDate, endDate } = query.data;
-
-  const where: Prisma.DonationWhereInput = {
-    orgId,
-    ...(campaignId ? { campaignId } : {}),
-    ...(status ? { status } : {}),
-    ...(startDate || endDate
-      ? {
-          createdAt: {
-            ...(startDate ? { gte: new Date(startDate) } : {}),
-            ...(endDate ? { lte: new Date(endDate) } : {}),
-          },
-        }
-      : {}),
-  };
-
-  try {
-    const org = await prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { slug: true },
-    });
-
-    if (!org) {
-      return c.json({ error: "Organization not found" }, 404);
-    }
-
-    const EXPORT_LIMIT = 50_000;
-
-    const rows: string[] = [];
-    rows.push(
-      buildCsvRow([
-        "Date",
-        "Donor Name",
-        "Donor Email",
-        "Amount",
-        "Fees",
-        "Net Amount",
-        "Campaign",
-        "Frequency",
-        "Payment Method",
-        "Status",
-        "Cover Fees",
-        "Receipt Number",
-      ])
-    );
-
-    let cursor: string | undefined;
-    let totalExported = 0;
-    let truncated = false;
-
-    while (true) {
-      const batch = await prisma.donation.findMany({
-        where,
-        include: {
-          donor: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
-              anonymous: true,
-            },
-          },
-          campaign: { select: { title: true } },
-        },
-        orderBy: { id: "asc" },
-        take: Math.min(1000, EXPORT_LIMIT - totalExported),
-        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      });
-
-      if (batch.length === 0) break;
-
-      for (const d of batch) {
-        const donorName = d.donor.anonymous
-          ? "Anonymous"
-          : `${d.donor.firstName} ${d.donor.lastName}`;
-        const donorEmail = d.donor.anonymous ? "" : d.donor.email;
-        const totalFeesCents = d.processingFeeCents + d.platformFeeCents;
-
-        rows.push(
-          buildCsvRow([
-            formatDateYMD(d.createdAt),
-            donorName,
-            donorEmail,
-            (d.amountCents / 100).toFixed(2),
-            (totalFeesCents / 100).toFixed(2),
-            (d.netAmountCents / 100).toFixed(2),
-            d.campaign.title,
-            d.frequency,
-            d.paymentMethod ?? "",
-            d.status,
-            d.coverFees ? "Yes" : "No",
-            d.receiptNumber ?? "",
-          ])
-        );
-      }
-
-      totalExported += batch.length;
-      cursor = batch[batch.length - 1].id;
-
-      if (totalExported >= EXPORT_LIMIT) {
-        truncated = true;
-        break;
-      }
-
-      if (batch.length < 1000) break;
-    }
-
-    if (truncated) {
-      rows.push(
-        buildCsvRow([
-          `[Export truncated at ${EXPORT_LIMIT} rows. Please apply filters to export smaller batches.]`,
-        ])
-      );
-    }
-
-    const csv = rows.join("\r\n");
-    const date = new Date().toISOString().slice(0, 10);
-    const filename = `donations-${org.slug}-${date}.csv`;
-
-    return new Response(csv, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
-    });
-  } catch (err) {
-    console.error("Error exporting donations:", err);
-    return c.json({ error: "Failed to export donations" }, 500);
   }
 });

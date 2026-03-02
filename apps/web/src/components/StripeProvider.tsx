@@ -65,7 +65,8 @@ const appearance: StripeElementsOptions["appearance"] = {
 
 interface StripeProviderProps {
   clientSecret: string;
-  stripeAccount: string;
+  /** Stripe Connect account ID. Pass for payments on behalf of connected orgs. */
+  stripeAccount?: string;
   children: React.ReactNode;
 }
 
@@ -78,7 +79,7 @@ export default function StripeProvider({
   const stripePromise = useMemo(
     () =>
       loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "", {
-        stripeAccount,
+        ...(stripeAccount ? { stripeAccount } : {}),
       }),
     [stripeAccount]
   );
