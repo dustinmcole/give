@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { getCampaign, updateCampaign } from "@/lib/api";
 import type { Campaign, UpdateCampaignInput } from "@/lib/api";
@@ -131,6 +132,7 @@ function campaignToForm(c: Campaign): FormState {
 export default function CampaignEditPage() {
   const params = useParams();
   const router = useRouter();
+  const { getToken } = useAuth();
   const id = params.id as string;
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -194,7 +196,7 @@ export default function CampaignEditPage() {
     };
 
     try {
-      await updateCampaign(id, payload);
+      await updateCampaign(id, payload, getToken);
       router.push(`/dashboard/campaigns/${id}`);
     } catch (err) {
       setSaveError(

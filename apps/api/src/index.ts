@@ -11,12 +11,12 @@ import { donationRoutes } from "./routes/donations.js";
 import { donorRoutes } from "./routes/donors.js";
 import { stripeRoutes } from "./routes/stripe.js";
 import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
-import { clerkAuth } from "./middleware/auth.js";
+import { clerkAuth, requireOrgAccess } from "./middleware/auth.js";
 import type { AuthVariables } from "./middleware/auth.js";
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
-// ─── Middleware ────────────────────────────────────────────
+// ─── Global Middleware ─────────────────────────────────────
 app.use("*", logger());
 app.use(
   "*",
@@ -27,35 +27,74 @@ app.use(
   })
 );
 
-app.use("*", async (c, next) => {
-  const path = c.req.path;
-  const method = c.req.method;
+// ─── Public Routes (no auth required) ─────────────────────
 
-  // Public routes that bypass auth
-  const isPublic =
-    path === "/api/health" ||
-    path.endsWith("/public") ||
-    (path === "/api/donations" && method === "POST") ||
-    path.startsWith("/api/stripe") ||
-    path.startsWith("/api/webhooks/clerk");
+// Health check
+app.route("/api/health", healthRoutes);
 
-  if (isPublic) {
-    return next();
-  }
+// Stripe webhooks & connect — Stripe calls these directly, must stay public
+app.route("/api/stripe", stripeRoutes);
 
-  // Require auth for everything else
+// Clerk webhooks — verified by svix signature, not Clerk JWT
+// Note: no clerkAuth middleware — Clerk calls this directly
+app.route("/api/webhooks/clerk", clerkWebhookRoutes);
+
+// ─── Campaign Route Auth ───────────────────────────────────
+//
+// Public (no auth):
+//   GET  /api/campaigns/:id        — donation page loads campaign data
+//   GET  /api/campaigns/:id/public — public campaign embed
+//
+// Protected (Clerk JWT required):
+//   POST   /api/campaigns          — create campaign
+//   PATCH  /api/campaigns/:id      — update campaign
+
+app.use("/api/campaigns", async (c, next) => {
+  if (c.req.method !== "POST") return next();
   return clerkAuth(c, next);
 });
 
-// ─── Routes ───────────────────────────────────────────────
-app.route("/api/health", healthRoutes);
-app.route("/api/orgs", orgRoutes);
+app.use("/api/campaigns/:id", async (c, next) => {
+  if (c.req.method !== "PATCH") return next();
+  return clerkAuth(c, next);
+});
+
 app.route("/api/campaigns", campaignRoutes);
+
+// ─── Donation Route Auth ───────────────────────────────────
+//
+// Public (no auth):
+//   POST /api/donations          — anonymous donor checkout
+//   GET  /api/donations/:id      — donation confirmation page
+//
+// Protected (Clerk JWT required):
+//   GET  /api/donations          — org dashboard lists donations by orgId
+
+app.use("/api/donations", async (c, next) => {
+  if (c.req.method !== "GET") return next();
+  return clerkAuth(c, next);
+});
+
 app.route("/api/donations", donationRoutes);
+
+// ─── Organization Route Auth ───────────────────────────────
+//
+// POST /api/orgs is public (onboarding — user may not be in DB yet)
+app.use("/api/orgs/:id", async (c, next) => {
+  return clerkAuth(c, next);
+});
+app.use("/api/orgs/:id", requireOrgAccess("id"));
+
+app.use("/api/orgs/:idOrSlug/:rest{.*}", async (c, next) => {
+  return clerkAuth(c, next);
+});
+app.use("/api/orgs/:idOrSlug/:rest{.*}", requireOrgAccess("idOrSlug"));
+
+app.route("/api/orgs", orgRoutes);
+
+// ─── Donor Route Auth ─────────────────────────────────────
+// Auth enforced within the route handler via clerkAuth middleware
 app.route("/api/donors", donorRoutes);
-app.route("/api/stripe", stripeRoutes);
-// Note: no clerkAuth middleware — Clerk calls this directly
-app.route("/api/webhooks/clerk", clerkWebhookRoutes);
 
 // ─── 404 catch-all ────────────────────────────────────────
 app.notFound((c) => {
