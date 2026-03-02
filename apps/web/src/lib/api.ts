@@ -209,6 +209,7 @@ export interface DonationDetail {
 export interface CreateDonationResponse {
   donationId: string;
   clientSecret: string;
+  stripeAccountId: string;
 }
 
 /** Public — donors are anonymous visitors */
