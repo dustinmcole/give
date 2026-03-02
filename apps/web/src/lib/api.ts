@@ -230,9 +230,14 @@ export function getDonation(id: string): Promise<DonationDetail> {
 /** Protected — org dashboard lists donations */
 export function listDonations(
   orgId: string,
-  token: TokenGetter
-): Promise<Donation[]> {
-  return request<Donation[]>(`/api/donations?orgId=${orgId}`, { token });
+  token: TokenGetter,
+  opts?: { campaignId?: string; limit?: number; page?: number }
+): Promise<{ data: Donation[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  const params = new URLSearchParams({ orgId });
+  if (opts?.campaignId) params.set("campaignId", opts.campaignId);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.page) params.set("page", String(opts.page));
+  return request<{ data: Donation[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/api/donations?${params}`, { token });
 }
 
 // ─── Donor ───────────────────────────────────────────────

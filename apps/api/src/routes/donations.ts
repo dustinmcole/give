@@ -35,6 +35,7 @@ const createDonationSchema = z.object({
 
 const listDonationsSchema = z.object({
   orgId: z.string().min(1),
+  campaignId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -253,6 +254,7 @@ donationRoutes.get("/:id", async (c) => {
 donationRoutes.get("/", async (c) => {
   const query = listDonationsSchema.safeParse({
     orgId: c.req.query("orgId"),
+    campaignId: c.req.query("campaignId"),
     page: c.req.query("page"),
     limit: c.req.query("limit"),
   });
@@ -264,13 +266,14 @@ donationRoutes.get("/", async (c) => {
     );
   }
 
-  const { orgId, page, limit } = query.data;
+  const { orgId, campaignId, page, limit } = query.data;
   const skip = (page - 1) * limit;
+  const whereClause = campaignId ? { orgId, campaignId } : { orgId };
 
   try {
     const [donations, total] = await Promise.all([
       prisma.donation.findMany({
-        where: { orgId },
+        where: whereClause,
         include: {
           donor: {
             select: {
@@ -293,7 +296,7 @@ donationRoutes.get("/", async (c) => {
         skip,
         take: limit,
       }),
-      prisma.donation.count({ where: { orgId } }),
+      prisma.donation.count({ where: whereClause }),
     ]);
 
     return c.json({
