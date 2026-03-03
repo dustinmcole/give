@@ -20,5 +20,7 @@ TOOLS.md
 MEMORY.md
 BUILD-COORD.md
 skills/
-.openclaw/
+# OpenClaw internal state (keep coordination docs tracked)
+.openclaw/workspace-state.json
+.openclaw/sessions/
 .pnpm-store/
