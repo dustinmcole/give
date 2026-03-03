@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useStripe, useElements, PaymentElement } from "@stripe/react-stripe-js";
 import {
   calculateFees,
+  STRIPE_CARD_RATE,
+  STRIPE_ACH_RATE,
+  STRIPE_ACH_CAP,
   type DonationFrequency,
   type PaymentMethod,
   type FeeBreakdown,
@@ -31,7 +34,14 @@ function formatCents(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-// ─── Step 1: Collect donor info and amount ─────────────────
+/** Calculate how much the nonprofit saves when donor pays via ACH vs card. */
+function calculateAchSavings(amountCents: number): number {
+  const cardFee = Math.round(amountCents * STRIPE_CARD_RATE + 30); // $0.30 fixed
+  const achFee = Math.min(Math.round(amountCents * STRIPE_ACH_RATE), STRIPE_ACH_CAP * 100);
+  return Math.max(0, cardFee - achFee);
+}
+
+// --- Step 1: Collect donor info and amount -----------------
 
 interface DonorInfoStepProps {
   campaignId: string;
@@ -43,7 +53,8 @@ interface DonorInfoStepProps {
     donationId: string,
     stripeAccountId: string,
     amountCents: number,
-    fees: FeeBreakdown
+    fees: FeeBreakdown,
+    paymentMethod: PaymentMethod
   ) => void;
 }
 
@@ -58,7 +69,7 @@ function DonorInfoStep({
   const [customAmount, setCustomAmount] = useState("");
   const [isCustom, setIsCustom] = useState(false);
   const [frequency, setFrequency] = useState<DonationFrequency>("one_time");
-  const [paymentMethod] = useState<PaymentMethod>("card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [coverFees, setCoverFees] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -78,6 +89,9 @@ function DonorInfoStep({
     fees = calculateFees(effectiveAmountCents, paymentMethod, orgTier, coverFees);
   }
 
+  const achSavingsCents =
+    effectiveAmountCents > 0 ? calculateAchSavings(effectiveAmountCents) : 0;
+
   const amountError =
     effectiveAmountCents < 100 ? "Please enter at least $1.00." : null;
   const firstNameError = !firstName.trim() ? "First name is required." : null;
@@ -91,27 +105,31 @@ function DonorInfoStep({
   const isFormValid =
     !amountError && !firstNameError && !lastNameError && !emailError;
 
-  function showError(field: string) {
-    return submitAttempted || touched[field];
+  function showError(field: string): boolean {
+    return submitAttempted || touched[field] === true;
   }
 
-  function handleBlur(field: string) {
+  function handleBlur(field: string): void {
     setTouched((prev) => ({ ...prev, [field]: true }));
   }
 
-  function handleSuggestedAmount(dollars: number) {
+  function handleSuggestedAmount(dollars: number): void {
     setAmount(dollars);
     setIsCustom(false);
     setCustomAmount("");
     setTouched((prev) => ({ ...prev, amount: true }));
   }
 
-  function handleCustomFocus() {
+  function handleCustomFocus(): void {
     setIsCustom(true);
     setAmount(null);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handlePaymentMethodChange(method: PaymentMethod): void {
+    setPaymentMethod(method);
+  }
+
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setSubmitAttempted(true);
     if (!isFormValid) return;
@@ -146,7 +164,8 @@ function DonorInfoStep({
         result.donationId,
         result.stripeAccountId,
         effectiveAmountCents,
-        finalFees
+        finalFees,
+        paymentMethod
       );
     } catch (err) {
       setError(
@@ -161,7 +180,7 @@ function DonorInfoStep({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-      {/* ── Amount Selector ─────────────────────────────── */}
+      {/* Amount Selector */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">
           Donation Amount
@@ -213,7 +232,7 @@ function DonorInfoStep({
         )}
       </div>
 
-      {/* ── Frequency ───────────────────────────────────── */}
+      {/* Frequency */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">
           Frequency
@@ -236,7 +255,63 @@ function DonorInfoStep({
         </div>
       </div>
 
-      {/* ── Donor Info ──────────────────────────────────── */}
+      {/* Payment Method Selector */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Payment Method
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => handlePaymentMethodChange("card")}
+            className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg border-2 text-sm font-semibold transition-all cursor-pointer ${
+              paymentMethod === "card"
+                ? "border-give-primary bg-give-primary/5 text-give-primary"
+                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            Card
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePaymentMethodChange("ach")}
+            className={`flex items-center justify-center gap-2 py-3 px-4 rounded-lg border-2 text-sm font-semibold transition-all cursor-pointer ${
+              paymentMethod === "ach"
+                ? "border-give-primary bg-give-primary/5 text-give-primary"
+                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            Bank Transfer
+          </button>
+        </div>
+
+        {/* ACH savings message */}
+        {paymentMethod === "ach" && achSavingsCents > 0 && (
+          <div className="mt-2 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-xs text-green-800 font-medium">
+              Save the nonprofit ${formatCents(achSavingsCents)} by paying via bank transfer
+            </p>
+          </div>
+        )}
+
+        {/* ACH timing note */}
+        {paymentMethod === "ach" && (
+          <p className="mt-1.5 text-xs text-gray-500">
+            Bank transfers take 3-5 business days to process and confirm.
+          </p>
+        )}
+      </div>
+
+      {/* Donor Info */}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-gray-700">
           Your Information
@@ -296,7 +371,7 @@ function DonorInfoStep({
         </div>
       </div>
 
-      {/* ── Cover the Fee ───────────────────────────────── */}
+      {/* Cover the Fee */}
       {fees && (
         <div className="bg-gray-50 rounded-lg p-4">
           <label className="flex items-start gap-3 cursor-pointer">
@@ -324,7 +399,10 @@ function DonorInfoStep({
               <span>${formatCents(fees.donationAmount)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Processing fee</span>
+              <span>
+                Processing fee{" "}
+                {paymentMethod === "ach" ? "(0.8% ACH, max $5)" : "(2.2% + $0.30)"}
+              </span>
               <span>${formatCents(fees.processingFee)}</span>
             </div>
             <div className="flex justify-between">
@@ -343,14 +421,14 @@ function DonorInfoStep({
         </div>
       )}
 
-      {/* ── Error ───────────────────────────────────────── */}
+      {/* Error */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
           {error}
         </div>
       )}
 
-      {/* ── Submit — disabled when form is invalid after first attempt ── */}
+      {/* Submit */}
       <button
         type="submit"
         disabled={isSubmitting || (submitAttempted && !isFormValid)}
@@ -363,18 +441,19 @@ function DonorInfoStep({
             : "Continue to Payment"}
       </button>
 
-      {/* ── Trust Indicators ────────────────────────────── */}
+      {/* Trust Indicators */}
       <TrustIndicators orgEin={orgEin} orgName={orgName} />
     </form>
   );
 }
 
-// ─── Step 2: Stripe PaymentElement + confirm ───────────────
+// --- Step 2: Stripe PaymentElement + confirm ---------------
 
 interface PaymentStepInnerProps {
   donationId: string;
   fees: FeeBreakdown;
   campaignId: string;
+  paymentMethod: PaymentMethod;
   onBack: () => void;
 }
 
@@ -382,6 +461,7 @@ function PaymentStepInner({
   donationId,
   fees,
   campaignId,
+  paymentMethod,
   onBack,
 }: PaymentStepInnerProps) {
   const stripe = useStripe();
@@ -391,7 +471,9 @@ function PaymentStepInner({
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  async function handleConfirm(e: React.FormEvent) {
+  const isAch = paymentMethod === "ach";
+
+  async function handleConfirm(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setSubmitAttempted(true);
 
@@ -411,7 +493,6 @@ function PaymentStepInner({
     setIsSubmitting(true);
 
     try {
-      // Validate Stripe form fields before confirming
       const { error: submitError } = await elements.submit();
       if (submitError) {
         setStripeError(
@@ -445,7 +526,7 @@ function PaymentStepInner({
 
   return (
     <form onSubmit={handleConfirm} className="space-y-6" noValidate>
-      {/* ── Back button ─────────────────────────────────── */}
+      {/* Back button */}
       <button
         type="button"
         onClick={onBack}
@@ -457,7 +538,7 @@ function PaymentStepInner({
         Back
       </button>
 
-      {/* ── Payment summary ──────────────────────────────── */}
+      {/* Payment summary */}
       <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3 flex items-center justify-between">
         <span className="text-sm font-medium text-green-800">Total charge</span>
         <span className="text-lg font-bold text-green-700">
@@ -465,7 +546,22 @@ function PaymentStepInner({
         </span>
       </div>
 
-      {/* ── Stripe PaymentElement ────────────────────────── */}
+      {/* ACH pending notice */}
+      {isAch && (
+        <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <svg className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="text-xs text-blue-800">
+            <p className="font-semibold mb-0.5">Bank transfer confirmation takes 3-5 business days</p>
+            <p className="text-blue-700">
+              You&apos;ll receive an email confirmation once your payment clears. The nonprofit will receive your donation shortly after.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Stripe PaymentElement */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">
           Payment Details
@@ -488,22 +584,26 @@ function PaymentStepInner({
         )}
       </div>
 
-      {/* ── Payment error ────────────────────────────────── */}
+      {/* Payment error */}
       {stripeError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
           {stripeError}
         </div>
       )}
 
-      {/* ── Submit — disabled until Stripe Elements is ready ── */}
+      {/* Submit */}
       <button
         type="submit"
         disabled={isSubmitting || !stripe || !elements}
         className="w-full py-4 px-6 rounded-lg bg-give-primary text-white font-semibold text-base hover:bg-give-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
       >
         {isSubmitting
-          ? "Processing payment..."
-          : `Complete Donation — $${formatCents(fees.totalCharged)}`}
+          ? isAch
+            ? "Initiating bank transfer..."
+            : "Processing payment..."
+          : isAch
+            ? `Authorize Bank Transfer — $${formatCents(fees.totalCharged)}`
+            : `Complete Donation — $${formatCents(fees.totalCharged)}`}
       </button>
 
       {!stripe && (
@@ -528,7 +628,7 @@ function PaymentStep({ clientSecret, stripeAccount, ...innerProps }: PaymentStep
   );
 }
 
-// ─── Trust Indicators (shared) ─────────────────────────────
+// --- Trust Indicators (shared) -----------------------------
 
 function TrustIndicators({ orgEin, orgName }: { orgEin?: string | null; orgName?: string }) {
   return (
@@ -573,7 +673,7 @@ function TrustIndicators({ orgEin, orgName }: { orgEin?: string | null; orgName?
   );
 }
 
-// ─── Root component ────────────────────────────────────────
+// --- Root component ----------------------------------------
 
 export default function DonationForm({
   campaignId,
@@ -586,22 +686,25 @@ export default function DonationForm({
   const [donationId, setDonationId] = useState<string | null>(null);
   const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("card");
 
   function handleInfoComplete(
     secret: string,
     id: string,
     accountId: string,
     _amountCents: number,
-    feeBreakdown: FeeBreakdown
-  ) {
+    feeBreakdown: FeeBreakdown,
+    paymentMethod: PaymentMethod
+  ): void {
     setClientSecret(secret);
     setDonationId(id);
     setStripeAccountId(accountId);
     setFees(feeBreakdown);
+    setSelectedPaymentMethod(paymentMethod);
     setStep("payment");
   }
 
-  function handleBack() {
+  function handleBack(): void {
     setStep("info");
     setClientSecret(null);
     setDonationId(null);
@@ -616,6 +719,7 @@ export default function DonationForm({
         donationId={donationId}
         fees={fees}
         campaignId={campaignId}
+        paymentMethod={selectedPaymentMethod}
         onBack={handleBack}
       />
     );

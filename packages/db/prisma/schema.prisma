@@ -269,3 +269,13 @@ enum PaymentMethodType {
   APPLE_PAY
   GOOGLE_PAY
 }
+
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  orgName   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("waitlist_entries")
+}
