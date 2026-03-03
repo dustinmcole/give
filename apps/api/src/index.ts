@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import { healthRoutes } from "./routes/health.js";
+import { waitlistRoutes } from "./routes/waitlist.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { campaignRoutes } from "./routes/campaigns.js";
 import { donationRoutes } from "./routes/donations.js";
@@ -33,6 +34,10 @@ app.use(
 
 // Health check
 app.route("/api/health", healthRoutes);
+
+// Waitlist signup — public, rate limited
+app.use("/api/waitlist", publicRateLimit);
+app.route("/api/waitlist", waitlistRoutes);
 
 // Stripe webhooks & connect — exempt from rate limiting (Stripe IPs are trusted)
 // Must stay public; signature verification happens inside the route handler.
