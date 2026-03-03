@@ -1,0 +1,19 @@
+{
+  "updated": "2026-03-03T06:00:00Z",
+  "updated_by": "coord",
+  "open_prs": [
+    {"number": 103, "title": "feat: Beta waitlist signup", "branch": "ocdev/feat/issue-64-beta-waitlist", "status": "ci_failing", "issue": 64},
+    {"number": 102, "title": "feat: Recurring donations via Stripe", "branch": "ocdev/feat/issue-61-recurring-donations", "status": "ci_failing", "issue": 61},
+    {"number": 101, "title": "feat: Embeddable donation widget", "branch": "ocdev/feat/issue-62-embeddable-widget", "status": "ci_passing", "issue": 62},
+    {"number": 99, "title": "feat: Social sharing buttons", "branch": "ocdev/feat/issue-74-social-sharing", "status": "ci_passing", "issue": 74},
+    {"number": 50, "title": "feat: Dashboard real data", "branch": "give/dashboard-real-data", "status": "unknown", "owner": "dustin"}
+  ],
+  "active_issues": [105, 104, 106, 74, 65, 64, 63, 62, 61, 59, 57, 45, 44, 43, 41],
+  "recent_merges": [
+    {"number": 100, "title": "feat: campaign detail page + QR code", "merged": "2026-03-02"}
+  ],
+  "blockers": [
+    "PR #102 (recurring donations) — CI build failure",
+    "PR #103 (beta waitlist) — CI build failure"
+  ]
+}
