@@ -23,8 +23,10 @@
   "use strict";
 
   // ── Config from script tag ──────────────────────────────────
-  var scripts = document.getElementsByTagName("script");
-  var currentScript = scripts[scripts.length - 1];
+  var currentScript = document.currentScript || (function () {
+    var s = document.getElementsByTagName("script");
+    return s[s.length - 1];
+  })();
 
   var campaignId = currentScript.getAttribute("data-campaign");
   var buttonText = currentScript.getAttribute("data-text") || "Donate Now";
@@ -34,6 +36,11 @@
   if (!campaignId) {
     console.warn("[give/embed.js] Missing data-campaign attribute.");
     return;
+  }
+
+  // Validate buttonColor to prevent style injection
+  if (!/^#[0-9a-fA-F]{3,8}$/.test(buttonColor)) {
+    buttonColor = "#2563eb";
   }
 
   // ── Determine base URL from script src ─────────────────────
@@ -81,17 +88,22 @@
   btn.style.backgroundColor = buttonColor;
   btn.style.color = "#ffffff";
 
-  // Heart icon
+  // Heart icon — safe static SVG
   var iconSvg =
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
     '<path d="M12 21.593c-.425-.492-8.77-7.908-8.77-12.222C3.23 5.775 5.64 3.5 8.5 3.5c1.742 0 3.296.878 4.25 2.217A5.062 5.062 0 0117 3.5c2.86 0 5.27 2.275 5.27 5.871 0 4.314-8.345 11.73-8.77 12.222L12 21.593z"/>' +
     "</svg>";
 
-  btn.innerHTML = iconSvg + "<span>" + buttonText + "</span>";
+  // Use textContent for user-controlled text to prevent XSS
+  btn.innerHTML = iconSvg;
+  var btnSpan = document.createElement("span");
+  btnSpan.textContent = buttonText;
+  btn.appendChild(btnSpan);
 
   // ── Modal creation ──────────────────────────────────────────
   var overlay = null;
   var iframe = null;
+  var closeBtn = null;
 
   function openModal() {
     if (overlay) return; // already open
@@ -113,7 +125,7 @@
     title.className = "give-modal-title";
     title.textContent = "Make a Donation";
 
-    var closeBtn = document.createElement("button");
+    closeBtn = document.createElement("button");
     closeBtn.className = "give-modal-close";
     closeBtn.setAttribute("type", "button");
     closeBtn.setAttribute("aria-label", "Close donation form");
@@ -140,13 +152,16 @@
     // Prevent body scroll
     document.body.style.overflow = "hidden";
 
+    // Focus close button on open (a11y)
+    closeBtn.focus();
+
     // Close on overlay click (outside modal)
     overlay.addEventListener("click", function (e) {
       if (e.target === overlay) closeModal();
     });
 
-    // Close on Escape
-    document.addEventListener("keydown", handleEsc);
+    // Close on Escape + focus trap
+    document.addEventListener("keydown", handleKeydown);
 
     // Auto-resize iframe height via postMessage
     window.addEventListener("message", handleIframeMessage);
@@ -157,17 +172,42 @@
     overlay.remove();
     overlay = null;
     iframe = null;
+    closeBtn = null;
     document.body.style.overflow = "";
-    document.removeEventListener("keydown", handleEsc);
+    document.removeEventListener("keydown", handleKeydown);
     window.removeEventListener("message", handleIframeMessage);
+    // Return focus to trigger button
+    btn.focus();
   }
 
-  function handleEsc(e) {
-    if (e.key === "Escape") closeModal();
+  function handleKeydown(e) {
+    if (e.key === "Escape") {
+      closeModal();
+      return;
+    }
+    // Focus trap between close button and iframe
+    if (e.key === "Tab" && closeBtn && iframe) {
+      var focusables = [closeBtn, iframe];
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
   }
 
   function handleIframeMessage(e) {
     if (!iframe) return;
+    // Validate message source
+    if (e.source !== iframe.contentWindow) return;
     var data = e.data;
     if (data && data.type === "give:resize" && typeof data.height === "number") {
       // Add header height (≈57px) + small buffer

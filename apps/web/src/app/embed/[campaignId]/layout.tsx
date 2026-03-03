@@ -16,6 +16,9 @@ export const metadata: Metadata = {
 /**
  * Minimal embed layout — no nav, no footer, transparent background.
  * This wraps /embed/[campaignId] so it renders stripped of all site chrome.
+ *
+ * Note: X-Frame-Options and frame-ancestors CSP are set via Next.js headers
+ * in next.config.ts, NOT via meta tags (browsers ignore meta X-Frame-Options).
  */
 export default function EmbedLayout({
   children,
@@ -24,10 +27,6 @@ export default function EmbedLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <head>
-        {/* Allow embedding in iframes from any origin */}
-        <meta httpEquiv="X-Frame-Options" content="ALLOWALL" />
-      </head>
       <body
         className="font-[family-name:var(--font-inter)] antialiased"
         style={{ background: "transparent" }}
