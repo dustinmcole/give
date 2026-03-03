@@ -232,6 +232,22 @@ stripeRoutes.post("/webhooks", async (c) => {
         await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
 
+      case "invoice.payment_succeeded":
+        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
+        break;
+
+      case "invoice.payment_failed":
+        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        break;
+
+      case "customer.subscription.deleted":
+        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        break;
+
+      case "customer.subscription.updated":
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+        break;
+
       default:
         // Log unhandled event types for debugging, but return 200
         console.log(`Unhandled webhook event type: ${event.type}`);
@@ -467,4 +483,191 @@ async function getFirstDonationDate(
   });
 
   return first?.createdAt ?? new Date();
+}
+
+// ─── Subscription Webhook Handlers ────────────────────────
+
+async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+  const subscriptionId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : invoice.subscription?.id;
+
+  if (!subscriptionId) {
+    console.warn("invoice.payment_succeeded without subscription id:", invoice.id);
+    return;
+  }
+
+  // Find the original donation for this subscription
+  const originalDonation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (!originalDonation) {
+    console.warn(
+      "invoice.payment_succeeded: no donation found for subscription:",
+      subscriptionId
+    );
+    return;
+  }
+
+  // Determine if this is a renewal (not the initial invoice)
+  // The initial invoice PaymentIntent is already tracked on the original donation record.
+  const paymentIntentId =
+    typeof invoice.payment_intent === "string"
+      ? invoice.payment_intent
+      : invoice.payment_intent?.id ?? null;
+
+  const isInitialPayment =
+    paymentIntentId === originalDonation.stripePaymentIntentId;
+
+  if (isInitialPayment) {
+    // Initial payment — update the original donation to SUCCEEDED
+    const donation = await prisma.donation.update({
+      where: { id: originalDonation.id },
+      data: { status: "SUCCEEDED" },
+    });
+
+    await updateDonorAndCampaignAggregates(donation);
+    await sendReceiptEmail(donation.id, donation.orgId);
+    console.log(`Subscription initial payment succeeded for donation ${donation.id}`);
+    return;
+  }
+
+  // Renewal — create a new Donation record
+  const renewal = await prisma.donation.create({
+    data: {
+      amountCents: originalDonation.amountCents,
+      currency: originalDonation.currency,
+      status: "SUCCEEDED",
+      frequency: originalDonation.frequency,
+      paymentMethod: originalDonation.paymentMethod,
+      processingFeeCents: originalDonation.processingFeeCents,
+      platformFeeCents: originalDonation.platformFeeCents,
+      netAmountCents: originalDonation.netAmountCents,
+      coverFees: originalDonation.coverFees,
+      totalChargedCents: originalDonation.totalChargedCents,
+      dedicationType: originalDonation.dedicationType,
+      dedicationName: originalDonation.dedicationName,
+      dedicationMessage: originalDonation.dedicationMessage,
+      stripePaymentIntentId: paymentIntentId,
+      stripeSubscriptionId: subscriptionId,
+      stripeCustomerId: originalDonation.stripeCustomerId,
+      donorId: originalDonation.donorId,
+      campaignId: originalDonation.campaignId,
+      orgId: originalDonation.orgId,
+    },
+  });
+
+  await updateDonorAndCampaignAggregates(renewal);
+  await sendReceiptEmail(renewal.id, renewal.orgId);
+  console.log(
+    `Subscription renewal donation ${renewal.id} created for subscription ${subscriptionId}`
+  );
+}
+
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  const subscriptionId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : invoice.subscription?.id;
+
+  if (!subscriptionId) {
+    console.warn("invoice.payment_failed without subscription id:", invoice.id);
+    return;
+  }
+
+  // Find the most recent donation for this subscription
+  const donation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!donation) {
+    console.warn(
+      "invoice.payment_failed: no donation found for subscription:",
+      subscriptionId
+    );
+    return;
+  }
+
+  await prisma.donation.update({
+    where: { id: donation.id },
+    data: { status: "FAILED" },
+  });
+
+  console.warn(
+    `Subscription payment failed for donation ${donation.id} (subscription: ${subscriptionId})`
+  );
+
+  // TODO: notify org via email when notification system is available
+}
+
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  const originalDonation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscription.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (!originalDonation) {
+    console.warn(
+      "customer.subscription.deleted: no donation found for subscription:",
+      subscription.id
+    );
+    return;
+  }
+
+  console.log(
+    `Subscription ${subscription.id} cancelled. Original donation: ${originalDonation.id}. ` +
+    `Cancellation reason: ${subscription.cancellation_details?.reason ?? "unknown"}`
+  );
+
+  // TODO: update a subscription status field if added to schema
+}
+
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+  const originalDonation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscription.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (!originalDonation) {
+    console.warn(
+      "customer.subscription.updated: no donation found for subscription:",
+      subscription.id
+    );
+    return;
+  }
+
+  console.log(
+    `Subscription ${subscription.id} updated. Status: ${subscription.status}. ` +
+    `Original donation: ${originalDonation.id}`
+  );
+
+  // TODO: handle plan changes (e.g., amount update) when supported
+}
+
+// ─── Shared Helpers ───────────────────────────────────────
+
+async function updateDonorAndCampaignAggregates(
+  donation: Awaited<ReturnType<typeof prisma.donation.update>>
+) {
+  await prisma.donor.update({
+    where: { id: donation.donorId },
+    data: {
+      totalGivenCents: { increment: donation.amountCents },
+      donationCount: { increment: 1 },
+      lastDonationAt: new Date(),
+      firstDonationAt: await getFirstDonationDate(donation.donorId),
+    },
+  });
+
+  await prisma.campaign.update({
+    where: { id: donation.campaignId },
+    data: {
+      raisedAmountCents: { increment: donation.amountCents },
+      donationCount: { increment: 1 },
+    },
+  });
 }
