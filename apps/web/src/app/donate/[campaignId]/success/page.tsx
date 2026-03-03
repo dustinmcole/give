@@ -408,7 +408,7 @@ function SuccessContent({
           .print\\:border-gray-300 { border-color: #d1d5db !important; }
           .print\\:py-6 { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
         }
-      `}</style>
+      \`}</style>
     </div>
   );
 }
@@ -431,14 +431,12 @@ function SuccessPageInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // If Stripe redirected back with a failed status, show failure immediately
     if (redirectStatus === "failed") {
       setPaymentStatus("failed");
       setLoading(false);
       return;
     }
 
-    // Verify payment intent when we have a client secret (3DS / redirect flows)
     if (clientSecret && paymentIntentId) {
       verifyPaymentIntent(clientSecret, paymentIntentId).then((status) => {
         setPaymentStatus(status);
@@ -446,7 +444,6 @@ function SuccessPageInner() {
           setLoading(false);
           return;
         }
-        // Load donation details
         if (donationId) {
           getDonation(donationId)
             .then(setDonation)
@@ -465,7 +462,6 @@ function SuccessPageInner() {
       return;
     }
 
-    // Direct flow (non-redirect): just load the donation
     setPaymentStatus("succeeded");
     if (donationId) {
       getDonation(donationId)
@@ -483,17 +479,14 @@ function SuccessPageInner() {
     }
   }, [donationId, paymentIntentId, clientSecret, redirectStatus]);
 
-  // Still loading
   if (loading || paymentStatus === "verifying") {
     return <SuccessSkeleton />;
   }
 
-  // Payment failed
   if (paymentStatus === "failed") {
     return <FailedBanner campaignId={campaignId} />;
   }
 
-  // Donation lookup failed — payment succeeded but we can't show details
   if (error || !donation) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">

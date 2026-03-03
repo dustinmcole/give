@@ -8,6 +8,7 @@ import { getCampaign, listDonations } from "@/lib/api";
 import type { Campaign, Donation } from "@/lib/api";
 import GoalThermometer from "@/components/GoalThermometer";
 import CampaignQRCode from "@/components/CampaignQRCode";
+import EmbedCodePanel from "@/components/EmbedCodePanel";
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -104,6 +105,10 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
+// ─── Tabs ─────────────────────────────────────────────────
+
+type Tab = "overview" | "embed";
+
 // ─── Page ─────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -115,6 +120,7 @@ export default function CampaignDetailPage() {
   const [donations, setDonations] = useState<Donation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
 
   const [donationPageUrl, setDonationPageUrl] = useState(`/donate/${id}`);
 
@@ -246,133 +252,177 @@ export default function CampaignDetailPage() {
         />
       </div>
 
-      {/* ── Goal Thermometer ─────────────────────────── */}
-      {campaign.goalCents > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Fundraising Progress</h2>
-          <GoalThermometer
-            raisedCents={campaign.raisedCents}
-            goalCents={campaign.goalCents}
-          />
+      {/* ── Tabs ──────────────────────────────────────── */}
+      <div className="border-b border-gray-100">
+        <nav className="flex gap-1">
+          {(
+            [
+              { id: "overview" as const, label: "Overview" },
+              {
+                id: "embed" as const,
+                label: (
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    Embed
+                  </span>
+                ),
+              },
+            ] as { id: Tab; label: React.ReactNode }[]
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === tab.id
+                  ? "border-give-primary text-give-primary"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* ── Overview Tab ──────────────────────────────── */}
+      {activeTab === "overview" && (
+        <div className="space-y-6">
+          {/* ── Goal Thermometer ─────────────────────────── */}
+          {campaign.goalCents > 0 && (
+            <div className="bg-white rounded-xl border border-gray-100 p-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4">Fundraising Progress</h2>
+              <GoalThermometer
+                raisedCents={campaign.raisedCents}
+                goalCents={campaign.goalCents}
+              />
+            </div>
+          )}
+
+          {/* ── Main Grid ────────────────────────────────── */}
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* ── Recent Donations ───────────────────────── */}
+            <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100">
+              <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-900">Recent Donations</h2>
+                <Link
+                  href="/dashboard/donations"
+                  className="text-xs text-give-primary hover:underline font-medium"
+                >
+                  View all
+                </Link>
+              </div>
+
+              {donations.length === 0 ? (
+                <div className="px-6 py-12 text-center text-sm text-gray-400">
+                  No donations yet for this campaign.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-50">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">
+                          Donor
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wide">
+                          Amount
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">
+                          Frequency
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">
+                          Date
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {donations.map((d) => (
+                        <tr key={d.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-6 py-3 text-gray-900">
+                            {d.anonymous ? (
+                              <span className="text-gray-400 italic">Anonymous</span>
+                            ) : (
+                              d.donorName
+                            )}
+                          </td>
+                          <td className="px-6 py-3 text-right font-medium text-gray-900">
+                            {formatCents(d.amountCents)}
+                          </td>
+                          <td className="px-6 py-3 text-gray-500">
+                            {friendlyFreq(d.frequency)}
+                          </td>
+                          <td className="px-6 py-3 text-gray-400 whitespace-nowrap">
+                            {new Date(d.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* ── Right Column ───────────────────────────── */}
+            <div className="space-y-4">
+              {/* Quick Actions */}
+              <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
+                <h2 className="text-sm font-semibold text-gray-900">Quick Actions</h2>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-600">Donation Link</p>
+                      <p className="text-xs text-gray-400 truncate">{donationPageUrl}</p>
+                    </div>
+                    <CopyButton value={donationPageUrl} label="Copy" />
+                  </div>
+
+                  <a
+                    href={donationPageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-give-primary border border-give-primary/20 hover:bg-give-primary/5 transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    View Public Page
+                  </a>
+                </div>
+              </div>
+
+              {/* QR Code */}
+              <div className="bg-white rounded-xl border border-gray-100 p-5">
+                <h2 className="text-sm font-semibold text-gray-900 mb-3">QR Code</h2>
+                <CampaignQRCode url={donationPageUrl} campaignSlug={campaign.slug} />
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ── Main Grid ────────────────────────────────── */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* ── Recent Donations ───────────────────────── */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100">
-          <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Recent Donations</h2>
-            <Link
-              href="/dashboard/donations"
-              className="text-xs text-give-primary hover:underline font-medium"
-            >
-              View all
-            </Link>
+      {/* ── Embed Tab ─────────────────────────────────── */}
+      {activeTab === "embed" && (
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <div className="mb-6">
+            <h2 className="text-base font-semibold text-gray-900">
+              Embed this campaign
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Add a donation form to any website. Choose your preferred embed
+              method below.
+            </p>
           </div>
-
-          {donations.length === 0 ? (
-            <div className="px-6 py-12 text-center text-sm text-gray-400">
-              No donations yet for this campaign.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-50">
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">
-                      Donor
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wide">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">
-                      Frequency
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {donations.map((d) => (
-                    <tr key={d.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-3 text-gray-900">
-                        {d.anonymous ? (
-                          <span className="text-gray-400 italic">Anonymous</span>
-                        ) : (
-                          d.donorName
-                        )}
-                      </td>
-                      <td className="px-6 py-3 text-right font-medium text-gray-900">
-                        {formatCents(d.amountCents)}
-                      </td>
-                      <td className="px-6 py-3 text-gray-500">
-                        {friendlyFreq(d.frequency)}
-                      </td>
-                      <td className="px-6 py-3 text-gray-400 whitespace-nowrap">
-                        {new Date(d.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <EmbedCodePanel campaignId={campaign.id} />
         </div>
-
-        {/* ── Right Column ───────────────────────────── */}
-        <div className="space-y-4">
-          {/* Quick Actions */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-gray-900">Quick Actions</h2>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-gray-600">Donation Link</p>
-                  <p className="text-xs text-gray-400 truncate">{donationPageUrl}</p>
-                </div>
-                <CopyButton value={donationPageUrl} label="Copy" />
-              </div>
-
-              <a
-                href={donationPageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-give-primary border border-give-primary/20 hover:bg-give-primary/5 transition-all"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                View Public Page
-              </a>
-            </div>
-          </div>
-
-          {/* QR Code */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">QR Code</h2>
-            <CampaignQRCode url={donationPageUrl} campaignSlug={campaign.slug} />
-          </div>
-
-          {/* Embed Code */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-gray-900">Embed Code</h2>
-            <code className="block bg-gray-50 rounded-lg p-3 text-xs text-gray-600 font-mono break-all select-all leading-relaxed">
-              {`<iframe src="${donationPageUrl}" width="100%" height="700" frameborder="0"></iframe>`}
-            </code>
-            <CopyButton
-              value={`<iframe src="${donationPageUrl}" width="100%" height="700" frameborder="0"></iframe>`}
-              label="Copy Embed"
-            />
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
