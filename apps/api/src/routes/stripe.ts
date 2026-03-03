@@ -22,22 +22,24 @@ import {
   logClientError,
 } from "../lib/errors.js";
 import { normalizeEmail } from "../lib/sanitize.js";
+import { calculateFees } from "@give/shared";
+import type { PaymentMethod as SharedPaymentMethod, PlanTier } from "@give/shared";
 
 export const stripeRoutes = new Hono();
 
-// ─── In-memory processed event IDs (idempotency) ─────────
+// --- In-memory processed event IDs (idempotency) ---
 // Prevents double-processing if Stripe retries a webhook event.
 // MVP: in-memory set. For multi-instance, move to Redis or DB.
 const processedEventIds = new Set<string>();
 
-// ─── Validation Schemas ───────────────────────────────────
+// --- Validation Schemas ---
 
 const connectSchema = z.object({
   orgId: z.string().min(1),
   email: z.string().email(),
 });
 
-// ─── POST /connect — Create Stripe Connect Account ────────
+// --- POST /connect - Create Stripe Connect Account ---
 
 stripeRoutes.post("/connect", async (c) => {
   const body = await c.req.json().catch(() => null);
@@ -119,7 +121,7 @@ stripeRoutes.post("/connect", async (c) => {
   }
 });
 
-// ─── GET /connect/refresh/:orgId — Refresh Onboarding Link
+// --- GET /connect/refresh/:orgId - Refresh Onboarding Link ---
 
 stripeRoutes.get("/connect/refresh/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
@@ -159,10 +161,10 @@ stripeRoutes.get("/connect/refresh/:orgId", async (c) => {
   }
 });
 
-// ─── POST /webhooks — Stripe Webhook Handler ──────────────
+// --- POST /webhooks - Stripe Webhook Handler ---
 // Resilience rules:
-//  1. Always return 200 after successful signature verification — never 5xx
-//  2. Catch errors per-event so one bad event doesn't block others
+//  1. Always return 200 after successful signature verification - never 5xx
+//  2. Catch errors per-event so one bad event does not block others
 //  3. Skip already-processed event IDs (idempotency)
 
 stripeRoutes.post("/webhooks", async (c) => {
@@ -213,7 +215,7 @@ stripeRoutes.post("/webhooks", async (c) => {
     return c.json({ received: true, skipped: true });
   }
 
-  // Dispatch — catch per-event errors so we always return 200
+  // Dispatch - catch per-event errors so we always return 200
   try {
     switch (event.type) {
       case "payment_intent.succeeded":
@@ -232,12 +234,34 @@ stripeRoutes.post("/webhooks", async (c) => {
         await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
 
+      case "invoice.payment_succeeded":
+        await handleInvoicePaymentSucceeded(
+          event.data.object as Stripe.Invoice
+        );
+        break;
+
+      case "invoice.payment_failed":
+        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        break;
+
+      case "customer.subscription.deleted":
+        await handleSubscriptionDeleted(
+          event.data.object as Stripe.Subscription
+        );
+        break;
+
+      case "customer.subscription.updated":
+        await handleSubscriptionUpdated(
+          event.data.object as Stripe.Subscription
+        );
+        break;
+
       default:
         // Log unhandled event types for debugging, but return 200
         console.log(`Unhandled webhook event type: ${event.type}`);
     }
   } catch (err) {
-    // Log the error but do NOT propagate — webhook handlers must never return 5xx
+    // Log the error but do NOT propagate - webhook handlers must never return 5xx
     logServerError(`Error handling Stripe webhook ${event.type}`, {
       path: c.req.path,
       method: c.req.method,
@@ -253,7 +277,7 @@ stripeRoutes.post("/webhooks", async (c) => {
   return c.json({ received: true });
 });
 
-// ─── Webhook Handlers ─────────────────────────────────────
+// --- Webhook Handlers ---
 
 async function handlePaymentIntentSucceeded(
   paymentIntent: Stripe.PaymentIntent
@@ -267,6 +291,20 @@ async function handlePaymentIntentSucceeded(
     return;
   }
 
+  // For subscription donations, the initial payment is handled by
+  // invoice.payment_succeeded. Skip here to avoid double-counting.
+  const existing = await prisma.donation.findUnique({
+    where: { id: donationId },
+  });
+  if (!existing) {
+    console.warn(`payment_intent.succeeded: donation ${donationId} not found`);
+    return;
+  }
+  if (existing.stripeSubscriptionId) {
+    // Subscription payment - handled by invoice.payment_succeeded
+    return;
+  }
+
   // Update donation status
   const donation = await prisma.donation.update({
     where: { id: donationId },
@@ -276,34 +314,194 @@ async function handlePaymentIntentSucceeded(
     },
   });
 
-  // Update donor aggregates
-  await prisma.donor.update({
-    where: { id: donation.donorId },
-    data: {
-      totalGivenCents: { increment: donation.amountCents },
-      donationCount: { increment: 1 },
-      lastDonationAt: new Date(),
-      firstDonationAt: await getFirstDonationDate(donation.donorId),
-    },
-  });
-
-  // Update campaign aggregates (cached totals)
-  await prisma.campaign.update({
-    where: { id: donation.campaignId },
-    data: {
-      raisedAmountCents: { increment: donation.amountCents },
-      donationCount: { increment: 1 },
-    },
-  });
+  // Update donor and campaign aggregates
+  await updateDonorAndCampaignAggregates(donation);
 
   // Send donation receipt email
   await sendReceiptEmail(donationId, donation.orgId);
 }
 
 /**
+ * invoice.payment_succeeded
+ *
+ * Fired for every successful invoice (initial + renewals).
+ * For the initial payment, the Donation record already exists (created in POST /donations).
+ * For renewals we create a new Donation record so the org gets a full ledger.
+ */
+async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+  const subscriptionId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : (invoice.subscription as Stripe.Subscription | null)?.id;
+
+  if (!subscriptionId) {
+    // Not a subscription invoice - ignore
+    return;
+  }
+
+  const paymentIntentId =
+    typeof invoice.payment_intent === "string"
+      ? invoice.payment_intent
+      : (invoice.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
+
+  // Find the earliest Donation record for this subscription
+  const existingDonation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+    include: { donor: true, campaign: true, org: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (!existingDonation) {
+    console.warn(
+      `invoice.payment_succeeded: no donation found for subscription ${subscriptionId}`
+    );
+    return;
+  }
+
+  // If this payment_intent matches the one already on the initial donation,
+  // this is the initial payment - just update status to SUCCEEDED.
+  if (
+    paymentIntentId &&
+    existingDonation.stripePaymentIntentId === paymentIntentId
+  ) {
+    await prisma.donation.update({
+      where: { id: existingDonation.id },
+      data: { status: "SUCCEEDED" },
+    });
+    await updateDonorAndCampaignAggregates(existingDonation);
+    await sendReceiptEmail(existingDonation.id, existingDonation.orgId);
+    return;
+  }
+
+  // This is a renewal - recalculate fees from actual invoice amount
+  // instead of copying stale fee data from the original donation.
+  const invoiceAmountCents = invoice.amount_paid;
+  const paymentMethodMap: Record<string, SharedPaymentMethod> = {
+    CARD: "card", ACH: "ach", APPLE_PAY: "apple_pay", GOOGLE_PAY: "google_pay",
+  };
+  const sharedPaymentMethod: SharedPaymentMethod =
+    paymentMethodMap[existingDonation.paymentMethod ?? "CARD"] ?? "card";
+  const orgTier: PlanTier =
+    (existingDonation.org.planTier?.toLowerCase() as PlanTier) ?? "basic";
+  const fees = calculateFees(
+    invoiceAmountCents,
+    sharedPaymentMethod,
+    orgTier,
+    existingDonation.coverFees
+  );
+
+  const renewalDonation = await prisma.donation.create({
+    data: {
+      amountCents: fees.donationAmount,
+      currency: existingDonation.currency,
+      status: "SUCCEEDED",
+      frequency: existingDonation.frequency,
+      paymentMethod: existingDonation.paymentMethod,
+      processingFeeCents: fees.processingFee,
+      platformFeeCents: fees.platformFee,
+      netAmountCents: fees.netToOrg,
+      coverFees: existingDonation.coverFees,
+      totalChargedCents: fees.totalCharged,
+      stripeSubscriptionId: subscriptionId,
+      stripeCustomerId: existingDonation.stripeCustomerId,
+      stripePaymentIntentId: paymentIntentId,
+      donorId: existingDonation.donorId,
+      campaignId: existingDonation.campaignId,
+      orgId: existingDonation.orgId,
+    },
+  });
+
+  await updateDonorAndCampaignAggregates({
+    id: renewalDonation.id,
+    amountCents: renewalDonation.amountCents,
+    campaignId: renewalDonation.campaignId,
+    donorId: renewalDonation.donorId,
+    orgId: renewalDonation.orgId,
+  });
+  await sendReceiptEmail(renewalDonation.id, renewalDonation.orgId);
+
+  console.log(
+    `Renewal donation ${renewalDonation.id} created for subscription ${subscriptionId}`
+  );
+}
+
+/**
+ * invoice.payment_failed
+ *
+ * Mark the most recent PROCESSING donation for this subscription as FAILED.
+ */
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  const subscriptionId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : (invoice.subscription as Stripe.Subscription | null)?.id;
+
+  if (!subscriptionId) return;
+
+  const donation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscriptionId, status: "PROCESSING" },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!donation) {
+    console.warn(
+      `invoice.payment_failed: no PROCESSING donation for subscription ${subscriptionId}`
+    );
+    return;
+  }
+
+  await prisma.donation.update({
+    where: { id: donation.id },
+    data: { status: "FAILED" },
+  });
+
+  console.log(
+    `Donation ${donation.id} marked FAILED for subscription ${subscriptionId}`
+  );
+}
+
+/**
+ * customer.subscription.deleted
+ *
+ * A subscription has been cancelled (by org, donor, or due to repeated failures).
+ * Logged for now; a future cancellation UI feature will surface this.
+ */
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  const donation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscription.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (!donation) {
+    console.warn(
+      `customer.subscription.deleted: no donation for subscription ${subscription.id}`
+    );
+    return;
+  }
+
+  console.log(
+    `Subscription ${subscription.id} cancelled (donation ${donation.id}, org ${donation.orgId})`
+  );
+  // Future: create a cancellation event / notify org (#45)
+}
+
+/**
+ * customer.subscription.updated
+ *
+ * Handles plan changes (e.g. amount or interval updated).
+ * Logged for now; full subscription management is issue #45.
+ */
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+  console.log(
+    `Subscription ${subscription.id} updated. Status: ${subscription.status}`
+  );
+  // Future: sync updated amount/interval to Donation records (#45)
+}
+
+/**
  * Sends a donation receipt email for the given donation.
  * Generates a receipt number, updates the donation record, and emails the donor.
- * Errors are logged but never thrown — we never fail a webhook due to email issues.
+ * Errors are logged but never thrown - we never fail a webhook due to email issues.
  */
 async function sendReceiptEmail(
   donationId: string,
@@ -363,7 +561,7 @@ async function sendReceiptEmail(
     const { error } = await resend.emails.send({
       from: `${donation.org.name} via Give <${fromEmail}>`,
       to: donation.donor.email,
-      subject: `Your donation receipt from ${donation.org.name} — ${receiptNumber}`,
+      subject: `Your donation receipt from ${donation.org.name} - ${receiptNumber}`,
       html,
       text,
     });
@@ -386,7 +584,7 @@ async function sendReceiptEmail(
       `Receipt email sent for donation ${donationId} to ${donation.donor.email} (receipt: ${receiptNumber})`
     );
   } catch (err) {
-    // Never propagate — a failed email must not fail the webhook
+    // Never propagate - a failed email must not fail the webhook
     logServerError(
       `Unexpected error sending receipt email for donation ${donationId}`,
       { donationId, error: err }
@@ -455,11 +653,38 @@ async function handleAccountUpdated(account: Stripe.Account) {
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────
+// --- Shared Helpers ---
 
-async function getFirstDonationDate(
-  donorId: string
-): Promise<Date> {
+/**
+ * Increment donor and campaign aggregate counters after a successful payment.
+ */
+async function updateDonorAndCampaignAggregates(donation: {
+  id: string;
+  donorId: string;
+  campaignId: string;
+  amountCents: number;
+  orgId: string;
+}) {
+  await prisma.donor.update({
+    where: { id: donation.donorId },
+    data: {
+      totalGivenCents: { increment: donation.amountCents },
+      donationCount: { increment: 1 },
+      lastDonationAt: new Date(),
+      firstDonationAt: await getFirstDonationDate(donation.donorId),
+    },
+  });
+
+  await prisma.campaign.update({
+    where: { id: donation.campaignId },
+    data: {
+      raisedAmountCents: { increment: donation.amountCents },
+      donationCount: { increment: 1 },
+    },
+  });
+}
+
+async function getFirstDonationDate(donorId: string): Promise<Date> {
   const first = await prisma.donation.findFirst({
     where: { donorId, status: "SUCCEEDED" },
     orderBy: { createdAt: "asc" },
