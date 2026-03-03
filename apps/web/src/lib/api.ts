@@ -227,17 +227,64 @@ export function getDonation(id: string): Promise<DonationDetail> {
   return request<DonationDetail>(`/api/donations/${id}`);
 }
 
+export interface ListDonationsFilters {
+  campaignId?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+  sortBy?: "createdAt" | "amountCents" | "status";
+  sortOrder?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}
+
+export interface DonationListItem {
+  id: string;
+  amountCents: number;
+  totalChargedCents: number;
+  currency: string;
+  frequency: string;
+  status: string;
+  paymentMethod: string | null;
+  coverFees: boolean;
+  createdAt: string;
+  donor: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    anonymous: boolean;
+  } | null;
+  campaign: {
+    id: string;
+    title: string;
+    slug: string;
+  } | null;
+}
+
+export interface DonationListResponse {
+  data: DonationListItem[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
 /** Protected — org dashboard lists donations */
 export function listDonations(
   orgId: string,
-  token: TokenGetter,
-  opts?: { campaignId?: string; limit?: number; page?: number }
-): Promise<{ data: Donation[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  token?: TokenGetter,
+  filters?: ListDonationsFilters
+): Promise<DonationListResponse> {
   const params = new URLSearchParams({ orgId });
-  if (opts?.campaignId) params.set("campaignId", opts.campaignId);
-  if (opts?.limit) params.set("limit", String(opts.limit));
-  if (opts?.page) params.set("page", String(opts.page));
-  return request<{ data: Donation[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/api/donations?${params}`, { token });
+  if (filters?.campaignId) params.set("campaignId", filters.campaignId);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.startDate) params.set("startDate", filters.startDate);
+  if (filters?.endDate) params.set("endDate", filters.endDate);
+  if (filters?.search) params.set("search", filters.search);
+  if (filters?.sortBy) params.set("sortBy", filters.sortBy);
+  if (filters?.sortOrder) params.set("sortOrder", filters.sortOrder);
+  if (filters?.limit) params.set("limit", String(filters.limit));
+  if (filters?.page) params.set("page", String(filters.page));
+  return request<DonationListResponse>(`/api/donations?${params}`, token ? { token } : undefined);
 }
 
 // ─── Donor ───────────────────────────────────────────────
@@ -256,14 +303,56 @@ export interface Donor {
   createdAt: string;
 }
 
+export interface DonorListMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface DonorListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: "totalGivenCents" | "lastDonationAt" | "donationCount" | "firstDonationAt";
+  sortOrder?: "asc" | "desc";
+  frequency?: "one_time" | "recurring";
+  startDate?: string;
+  endDate?: string;
+  campaignId?: string;
+}
+
 /** Protected — org dashboard */
 export function listDonors(
   orgId: string,
-  token: TokenGetter
-): Promise<Donor[]> {
-  return request<{ data: Donor[] }>(`/api/orgs/${orgId}/donors`, { token }).then(
-    (r) => r.data
-  );
+  token: TokenGetter,
+  params?: DonorListParams
+): Promise<{ data: Donor[]; meta: DonorListMeta }> {
+  const qp = new URLSearchParams({ orgId });
+  if (params?.page) qp.set("page", String(params.page));
+  if (params?.limit) qp.set("limit", String(params.limit));
+  if (params?.search) qp.set("search", params.search);
+  if (params?.sortBy) qp.set("sortBy", params.sortBy);
+  if (params?.sortOrder) qp.set("sortOrder", params.sortOrder);
+  if (params?.frequency) qp.set("frequency", params.frequency);
+  if (params?.startDate) qp.set("startDate", params.startDate);
+  if (params?.endDate) qp.set("endDate", params.endDate);
+  if (params?.campaignId) qp.set("campaignId", params.campaignId);
+  return request<{ data: Donor[]; meta: DonorListMeta }>(`/api/donors?${qp}`, { token });
+}
+
+/** Returns the CSV export URL for donors matching the given filters */
+export function exportDonorsCsvUrl(
+  orgId: string,
+  params?: Omit<DonorListParams, "page" | "limit" | "sortBy" | "sortOrder">
+): string {
+  const qp = new URLSearchParams({ orgId });
+  if (params?.search) qp.set("search", params.search);
+  if (params?.frequency) qp.set("frequency", params.frequency);
+  if (params?.startDate) qp.set("startDate", params.startDate);
+  if (params?.endDate) qp.set("endDate", params.endDate);
+  if (params?.campaignId) qp.set("campaignId", params.campaignId);
+  return `${BASE_URL}/api/donors/export?${qp}`;
 }
 
 // ─── Organization Stats ──────────────────────────────────
