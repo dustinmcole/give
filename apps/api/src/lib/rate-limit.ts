@@ -77,6 +77,9 @@ export const orgCreateLimiter = createRateLimiter(5, 60 * 1000);
 /** GET /api/verify-ein — 20 req/min per IP */
 export const verifyEinLimiter = createRateLimiter(20, 60 * 1000);
 
+/** POST /api/waitlist — 5 req/hour per IP */
+export const waitlistCreateLimiter = createRateLimiter(5, 60 * 60 * 1000);
+
 // ─── Hono Helper ─────────────────────────────────────────
 
 import type { Context } from "hono";

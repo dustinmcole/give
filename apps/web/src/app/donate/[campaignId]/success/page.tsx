@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { loadStripe } from "@stripe/stripe-js";
 import { getDonation, type DonationDetail } from "@/lib/api";
+import SocialShare from "@/components/SocialShare";
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -31,24 +32,6 @@ function friendlyFrequency(freq: string): string {
     ANNUAL: "Annual recurring",
   };
   return map[freq] ?? freq;
-}
-
-// ─── Share helpers ────────────────────────────────────────
-
-function buildShareText(campaignTitle: string, orgName: string): string {
-  return `I just donated to ${campaignTitle} via ${orgName}! 💙`;
-}
-
-function twitterShareUrl(text: string, url: string): string {
-  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
-}
-
-function facebookShareUrl(url: string): string {
-  return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
-}
-
-function linkedinShareUrl(url: string, text: string): string {
-  return `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}&summary=${encodeURIComponent(text)}`;
 }
 
 // ─── Loading Skeleton ─────────────────────────────────────
@@ -163,25 +146,14 @@ function SuccessContent({
   donation: DonationDetail;
   campaignId: string;
 }) {
-  const [copied, setCopied] = useState(false);
-
   const brandColor = donation.campaign.color ?? "#2563eb";
   const isRecurring = donation.frequency !== "ONE_TIME";
   const campaignUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/donate/${campaignId}`
       : `https://givewith.us/donate/${campaignId}`;
-  const shareText = buildShareText(donation.campaign.title, donation.org.name);
-
-  const handleCopyLink = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(campaignUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      // ignore
-    }
-  }, [campaignUrl]);
+  const shareTitle = `Support ${donation.campaign.title}`;
+  const shareDescription = `I just donated to ${donation.campaign.title} via ${donation.org.name}! 💙 Join me in supporting this cause.`;
 
   return (
     <div className="min-h-screen bg-gray-50 print:bg-white">

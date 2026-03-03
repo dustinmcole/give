@@ -1,11 +1,17 @@
+import type { Metadata } from "next";
 import { getDonationCampaign } from "@/lib/api";
 import GoalThermometer from "@/components/GoalThermometer";
 import DonationForm from "@/components/DonationForm";
+import SocialShare from "@/components/SocialShare";
 import Link from "next/link";
+
+// ─── Types ────────────────────────────────────────────────
 
 interface DonatePageProps {
   params: Promise<{ campaignId: string }>;
 }
+
+// ─── Data fetcher (shared by metadata + page) ─────────────
 
 async function fetchCampaign(campaignId: string) {
   try {
@@ -14,6 +20,64 @@ async function fetchCampaign(campaignId: string) {
     return null;
   }
 }
+
+// ─── Open Graph / SEO metadata ────────────────────────────
+
+export async function generateMetadata(
+  { params }: DonatePageProps
+): Promise<Metadata> {
+  const { campaignId } = await params;
+  const campaign = await fetchCampaign(campaignId);
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://givewith.us";
+  const canonicalUrl = `${appUrl}/donate/${campaignId}`;
+
+  if (!campaign) {
+    return {
+      title: "Campaign not found | Give",
+      description: "This campaign may have ended or the link may be incorrect.",
+    };
+  }
+
+  const rawDescription = campaign.description ?? "";
+  const ogDescription =
+    rawDescription.length > 200
+      ? rawDescription.slice(0, 197) + "…"
+      : rawDescription;
+
+  const ogImage = campaign.coverImageUrl ?? `${appUrl}/og-default.png`;
+
+  return {
+    title: `${campaign.title} | Give`,
+    description: ogDescription || `Support ${campaign.title} on Give.`,
+    openGraph: {
+      type: "website",
+      url: canonicalUrl,
+      title: campaign.title,
+      description: ogDescription || `Support ${campaign.title} on Give.`,
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 630,
+          alt: campaign.title,
+        },
+      ],
+      siteName: "Give",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: campaign.title,
+      description: ogDescription || `Support ${campaign.title} on Give.`,
+      images: [ogImage],
+    },
+    alternates: {
+      canonical: canonicalUrl,
+    },
+  };
+}
+
+// ─── Page ─────────────────────────────────────────────────
 
 export default async function DonatePage({ params }: DonatePageProps) {
   const { campaignId } = await params;
@@ -29,10 +93,7 @@ export default async function DonatePage({ params }: DonatePageProps) {
           <p className="text-gray-500 mb-6">
             This campaign may have ended or the link may be incorrect.
           </p>
-          <Link
-            href="/"
-            className="text-give-primary font-medium hover:underline"
-          >
+          <Link href="/" className="text-give-primary font-medium hover:underline">
             Return home
           </Link>
         </div>
@@ -40,10 +101,19 @@ export default async function DonatePage({ params }: DonatePageProps) {
     );
   }
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://givewith.us";
+  const canonicalUrl = `${appUrl}/donate/${campaignId}`;
+
   const donationCountLabel =
     campaign.donationCount === 1
       ? "1 donation"
       : `${campaign.donationCount.toLocaleString()} donations`;
+
+  const rawDescription = campaign.description ?? "";
+  const shareDescription =
+    rawDescription.length > 200
+      ? rawDescription.slice(0, 197) + "…"
+      : rawDescription;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,7 +127,6 @@ export default async function DonatePage({ params }: DonatePageProps) {
             Give
           </Link>
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            {/* HTTPS lock icon */}
             <svg
               className="w-4 h-4 text-green-500"
               fill="none"
@@ -72,7 +141,7 @@ export default async function DonatePage({ params }: DonatePageProps) {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
               />
             </svg>
-            <span className="text-gray-500">Secure donation</span>
+            <span>Secure donation</span>
           </div>
         </div>
       </header>
@@ -110,6 +179,23 @@ export default async function DonatePage({ params }: DonatePageProps) {
                 {campaign.description}
               </p>
             </div>
+
+            {/* ── Social Share ─────────────────────── */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-1">
+                Help spread the word
+              </h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Share this campaign to help{" "}
+                {campaign.org?.name ?? "this organization"} reach more
+                supporters.
+              </p>
+              <SocialShare
+                url={canonicalUrl}
+                title={campaign.title}
+                description={shareDescription}
+              />
+            </div>
           </div>
 
           {/* ── Donation Form (right) ────────────────── */}
@@ -133,7 +219,10 @@ export default async function DonatePage({ params }: DonatePageProps) {
         <div className="max-w-5xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
           <span>
             Powered by{" "}
-            <Link href="/" className="text-give-primary font-medium hover:underline">
+            <Link
+              href="/"
+              className="text-give-primary font-medium hover:underline"
+            >
               Give
             </Link>
           </span>

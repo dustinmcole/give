@@ -11,6 +11,7 @@ import { donationRoutes } from "./routes/donations.js";
 import { donorRoutes } from "./routes/donors.js";
 import { stripeRoutes } from "./routes/stripe.js";
 import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import { waitlistRoutes } from "./routes/waitlist.js";
 import { clerkAuth, requireOrgAccess } from "./middleware/auth.js";
 import type { AuthVariables } from "./middleware/auth.js";
 import { internalError, logServerError } from "./lib/errors.js";
@@ -32,6 +33,9 @@ app.use(
 
 // Health check
 app.route("/api/health", healthRoutes);
+
+// Beta waitlist — public, rate limited
+app.route("/api/waitlist", waitlistRoutes);
 
 // Stripe webhooks & connect — Stripe calls these directly, must stay public
 app.route("/api/stripe", stripeRoutes);
