@@ -210,6 +210,7 @@ donationRoutes.post("/", async (c) => {
         frequency: input.frequency as "monthly" | "quarterly" | "annual",
         applicationFeePercent: appFeePercent,
         stripeAccountId: org.stripeAccountId,
+        orgId: org.id,
         metadata: donationMeta,
       });
 

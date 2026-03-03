@@ -22,6 +22,8 @@ import {
   logClientError,
 } from "../lib/errors.js";
 import { normalizeEmail } from "../lib/sanitize.js";
+import { calculateFees } from "@give/shared";
+import type { PaymentMethod as SharedPaymentMethod, PlanTier } from "@give/shared";
 
 export const stripeRoutes = new Hono();
 
@@ -371,19 +373,35 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     return;
   }
 
-  // This is a renewal - create a new Donation record
+  // This is a renewal - recalculate fees from actual invoice amount
+  // instead of copying stale fee data from the original donation.
+  const invoiceAmountCents = invoice.amount_paid;
+  const paymentMethodMap: Record<string, SharedPaymentMethod> = {
+    CARD: "card", ACH: "ach", APPLE_PAY: "apple_pay", GOOGLE_PAY: "google_pay",
+  };
+  const sharedPaymentMethod: SharedPaymentMethod =
+    paymentMethodMap[existingDonation.paymentMethod ?? "CARD"] ?? "card";
+  const orgTier: PlanTier =
+    (existingDonation.org.planTier?.toLowerCase() as PlanTier) ?? "basic";
+  const fees = calculateFees(
+    invoiceAmountCents,
+    sharedPaymentMethod,
+    orgTier,
+    existingDonation.coverFees
+  );
+
   const renewalDonation = await prisma.donation.create({
     data: {
-      amountCents: existingDonation.amountCents,
+      amountCents: fees.donationAmount,
       currency: existingDonation.currency,
       status: "SUCCEEDED",
       frequency: existingDonation.frequency,
       paymentMethod: existingDonation.paymentMethod,
-      processingFeeCents: existingDonation.processingFeeCents,
-      platformFeeCents: existingDonation.platformFeeCents,
-      netAmountCents: existingDonation.netAmountCents,
+      processingFeeCents: fees.processingFee,
+      platformFeeCents: fees.platformFee,
+      netAmountCents: fees.netToOrg,
       coverFees: existingDonation.coverFees,
-      totalChargedCents: existingDonation.totalChargedCents,
+      totalChargedCents: fees.totalCharged,
       stripeSubscriptionId: subscriptionId,
       stripeCustomerId: existingDonation.stripeCustomerId,
       stripePaymentIntentId: paymentIntentId,

@@ -88,7 +88,8 @@ export async function createPaymentIntent(
 
 /**
  * Create (or retrieve existing) a Stripe Customer on the connected account.
- * Searches by email to avoid duplicate customers.
+ * Uses idempotency key on creation to prevent duplicates from concurrent requests
+ * (Stripe search index has ~1s lag, so search-then-create is not atomic).
  */
 export async function findOrCreateCustomer(
   email: string,
@@ -106,11 +107,52 @@ export async function findOrCreateCustomer(
     return existing.data[0]!;
   }
 
-  return stripe.customers.create(
+  // Idempotency key prevents duplicate customers from concurrent requests.
+  const idempotencyKey = `customer_create_${stripeAccountId}_${email}`;
+
+  try {
+    return await stripe.customers.create(
+      {
+        email,
+        name,
+        metadata,
+      },
+      { stripeAccount: stripeAccountId, idempotencyKey }
+    );
+  } catch (err: unknown) {
+    // Race condition: another request created the customer first. Re-search.
+    const retrySearch = await stripe.customers.search(
+      { query: `email:"${email}"`, limit: 1 },
+      { stripeAccount: stripeAccountId }
+    );
+    if (retrySearch.data.length > 0) {
+      return retrySearch.data[0]!;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Find or create a shared "Recurring Donation" product for the given org.
+ * Prevents orphaned Stripe Products by reusing one per org, tagged with metadata.
+ */
+async function findOrCreateDonationProduct(
+  orgId: string,
+  stripeAccountId: string
+): Promise<Stripe.Product> {
+  const existing = await stripe.products.search(
+    { query: `metadata["orgId"]:"${orgId}" AND active:"true"`, limit: 1 },
+    { stripeAccount: stripeAccountId }
+  );
+
+  if (existing.data.length > 0) {
+    return existing.data[0]!;
+  }
+
+  return stripe.products.create(
     {
-      email,
-      name,
-      metadata,
+      name: "Recurring Donation",
+      metadata: { orgId },
     },
     { stripeAccount: stripeAccountId }
   );
@@ -130,6 +172,7 @@ export async function createSubscription(options: {
   frequency: "monthly" | "quarterly" | "annual";
   applicationFeePercent: number;
   stripeAccountId: string;
+  orgId: string;
   metadata: Record<string, string>;
 }): Promise<Stripe.Subscription> {
   const {
@@ -139,6 +182,7 @@ export async function createSubscription(options: {
     frequency,
     applicationFeePercent,
     stripeAccountId,
+    orgId,
     metadata,
   } = options;
 
@@ -147,11 +191,8 @@ export async function createSubscription(options: {
     throw new Error(`Unsupported frequency: ${frequency}`);
   }
 
-  // Create a one-off product for this donation subscription
-  const product = await stripe.products.create(
-    { name: "Recurring Donation" },
-    { stripeAccount: stripeAccountId }
-  );
+  // Reuse shared product per org instead of creating one per subscription
+  const product = await findOrCreateDonationProduct(orgId, stripeAccountId);
 
   return stripe.subscriptions.create(
     {
