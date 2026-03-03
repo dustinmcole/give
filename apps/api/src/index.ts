@@ -11,6 +11,7 @@ import { donationRoutes } from "./routes/donations.js";
 import { donorRoutes } from "./routes/donors.js";
 import { stripeRoutes } from "./routes/stripe.js";
 import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import { waitlistRoutes } from "./routes/waitlist.js";
 import { clerkAuth, requireOrgAccess } from "./middleware/auth.js";
 import type { AuthVariables } from "./middleware/auth.js";
 import { publicRateLimit, authRateLimit } from "./middleware/rate-limit.js";
@@ -33,6 +34,10 @@ app.use(
 
 // Health check
 app.route("/api/health", healthRoutes);
+
+// Waitlist — public, no auth, rate limited
+app.use("/api/waitlist", publicRateLimit);
+app.route("/api/waitlist", waitlistRoutes);
 
 // Stripe webhooks & connect — exempt from rate limiting (Stripe IPs are trusted)
 // Must stay public; signature verification happens inside the route handler.
