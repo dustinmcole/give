@@ -24,3 +24,7 @@ skills/
 .openclaw/workspace-state.json
 .openclaw/sessions/
 .pnpm-store/
+
+# Agent memory system (persists across branch switches)
+.give-memory/
+.give-reference/
