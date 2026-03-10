@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { getCampaign, listDonations } from "@/lib/api";
-import type { Campaign, Donation } from "@/lib/api";
+import type { Campaign, DonationListItem } from "@/lib/api";
 import GoalThermometer from "@/components/GoalThermometer";
 import CampaignQRCode from "@/components/CampaignQRCode";
 
@@ -112,7 +112,7 @@ export default function CampaignDetailPage() {
   const id = params.id as string;
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [donations, setDonations] = useState<Donation[]>([]);
+  const [donations, setDonations] = useState<DonationListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,7 +130,7 @@ export default function CampaignDetailPage() {
         getCampaign(id),
         orgId
           ? listDonations(orgId, getToken, { campaignId: id, limit: 10 })
-          : Promise.resolve({ data: [] as Donation[], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } }),
+          : Promise.resolve({ data: [] as DonationListItem[], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } }),
       ]);
       setCampaign(campaignData);
       setDonations(donationRes.data);
@@ -298,10 +298,10 @@ export default function CampaignDetailPage() {
                   {donations.map((d) => (
                     <tr key={d.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-3 text-gray-900">
-                        {d.anonymous ? (
+                        {d.donor?.anonymous ? (
                           <span className="text-gray-400 italic">Anonymous</span>
                         ) : (
-                          d.donorName
+                          d.donor ? `${d.donor.firstName} ${d.donor.lastName}` : 'Unknown'
                         )}
                       </td>
                       <td className="px-6 py-3 text-right font-medium text-gray-900">
