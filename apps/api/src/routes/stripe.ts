@@ -26,8 +26,6 @@ import { normalizeEmail } from "../lib/sanitize.js";
 export const stripeRoutes = new Hono();
 
 // ─── In-memory processed event IDs (idempotency) ─────────
-// Prevents double-processing if Stripe retries a webhook event.
-// MVP: in-memory set. For multi-instance, move to Redis or DB.
 const processedEventIds = new Set<string>();
 
 // ─── Validation Schemas ───────────────────────────────────
@@ -46,7 +44,6 @@ stripeRoutes.post("/connect", async (c) => {
     return c.json(err, 400);
   }
 
-  // Sanitize
   if (typeof body.email === "string") body.email = normalizeEmail(body.email);
 
   const parsed = connectSchema.safeParse(body);
@@ -67,7 +64,6 @@ stripeRoutes.post("/connect", async (c) => {
       return c.json(err, 404);
     }
 
-    // If org already has a Stripe account, just generate a new onboarding link
     if (org.stripeAccountId) {
       const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
       const accountLink = await createAccountLink(
@@ -83,16 +79,13 @@ stripeRoutes.post("/connect", async (c) => {
       });
     }
 
-    // Create new Stripe Connect account
     const stripeAccount = await createConnectAccount(org.name, email);
 
-    // Save Stripe account ID to org
     await prisma.organization.update({
       where: { id: orgId },
       data: { stripeAccountId: stripeAccount.id },
     });
 
-    // Generate onboarding link
     const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
     const accountLink = await createAccountLink(
       stripeAccount.id,
@@ -160,10 +153,6 @@ stripeRoutes.get("/connect/refresh/:orgId", async (c) => {
 });
 
 // ─── POST /webhooks — Stripe Webhook Handler ──────────────
-// Resilience rules:
-//  1. Always return 200 after successful signature verification — never 5xx
-//  2. Catch errors per-event so one bad event doesn't block others
-//  3. Skip already-processed event IDs (idempotency)
 
 stripeRoutes.post("/webhooks", async (c) => {
   const signature = c.req.header("stripe-signature");
@@ -192,7 +181,6 @@ stripeRoutes.post("/webhooks", async (c) => {
   let event: Stripe.Event;
 
   try {
-    // Hono gives us the raw body for webhook signature verification
     const rawBody = await c.req.text();
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch (err) {
@@ -207,13 +195,11 @@ stripeRoutes.post("/webhooks", async (c) => {
     return c.json(body, 400);
   }
 
-  // Idempotency: skip already-processed events
   if (processedEventIds.has(event.id)) {
     console.log(`Stripe webhook: skipping already-processed event ${event.id}`);
     return c.json({ received: true, skipped: true });
   }
 
-  // Dispatch — catch per-event errors so we always return 200
   try {
     switch (event.type) {
       case "payment_intent.succeeded":
@@ -232,12 +218,26 @@ stripeRoutes.post("/webhooks", async (c) => {
         await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
 
+      // ── Subscription / Invoice events ────────────────────
+
+      case "invoice.paid":
+        await handleInvoicePaid(event.data.object as Stripe.Invoice);
+        break;
+
+      case "invoice.payment_failed":
+        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        break;
+
+      case "customer.subscription.deleted":
+        await handleSubscriptionDeleted(
+          event.data.object as Stripe.Subscription
+        );
+        break;
+
       default:
-        // Log unhandled event types for debugging, but return 200
         console.log(`Unhandled webhook event type: ${event.type}`);
     }
   } catch (err) {
-    // Log the error but do NOT propagate — webhook handlers must never return 5xx
     logServerError(`Error handling Stripe webhook ${event.type}`, {
       path: c.req.path,
       method: c.req.method,
@@ -247,7 +247,6 @@ stripeRoutes.post("/webhooks", async (c) => {
     });
   }
 
-  // Mark as processed only after successful dispatch attempt
   processedEventIds.add(event.id);
 
   return c.json({ received: true });
@@ -267,7 +266,6 @@ async function handlePaymentIntentSucceeded(
     return;
   }
 
-  // Update donation status
   const donation = await prisma.donation.update({
     where: { id: donationId },
     data: {
@@ -276,7 +274,6 @@ async function handlePaymentIntentSucceeded(
     },
   });
 
-  // Update donor aggregates
   await prisma.donor.update({
     where: { id: donation.donorId },
     data: {
@@ -287,7 +284,6 @@ async function handlePaymentIntentSucceeded(
     },
   });
 
-  // Update campaign aggregates (cached totals)
   await prisma.campaign.update({
     where: { id: donation.campaignId },
     data: {
@@ -296,102 +292,153 @@ async function handlePaymentIntentSucceeded(
     },
   });
 
-  // Send donation receipt email
   await sendReceiptEmail(donationId, donation.orgId);
 }
 
 /**
- * Sends a donation receipt email for the given donation.
- * Generates a receipt number, updates the donation record, and emails the donor.
- * Errors are logged but never thrown — we never fail a webhook due to email issues.
+ * Handle invoice.paid — fires for every successful subscription billing cycle.
+ * Creates a new Donation record for the cycle (after the first one).
  */
-async function sendReceiptEmail(
-  donationId: string,
-  orgId: string
-): Promise<void> {
-  try {
-    // Fetch full donation with related data
-    const donation = await prisma.donation.findUnique({
-      where: { id: donationId },
-      include: {
-        donor: true,
-        campaign: true,
-        org: true,
-      },
-    });
+async function handleInvoicePaid(invoice: Stripe.Invoice) {
+  const subscriptionId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : invoice.subscription?.id;
 
-    if (!donation) {
-      logServerError(`sendReceiptEmail: donation ${donationId} not found`, {
-        donationId,
-      });
-      return;
-    }
-
-    // Generate receipt number if not already set
-    let receiptNumber = donation.receiptNumber;
-    if (!receiptNumber) {
-      receiptNumber = await generateReceiptNumber(orgId, donation.createdAt);
-      await prisma.donation.update({
-        where: { id: donationId },
-        data: { receiptNumber },
-      });
-    }
-
-    // Build receipt template data
-    const receiptData = {
-      orgName: donation.org.name,
-      orgEin: donation.org.ein,
-      donorFirstName: donation.donor.firstName,
-      donorLastName: donation.donor.lastName,
-      donorEmail: donation.donor.email,
-      amountCents: donation.amountCents,
-      currency: donation.currency,
-      donationDate: donation.createdAt,
-      receiptNumber,
-      campaignName: donation.campaign.title,
-      dedicationType: donation.dedicationType,
-      dedicationName: donation.dedicationName,
-    };
-
-    const html = buildDonationReceiptHtml(receiptData);
-    const text = buildDonationReceiptText(receiptData);
-
-    // Send via Resend
-    const resend = getResend();
-    const fromEmail = getFromEmail();
-
-    const { error } = await resend.emails.send({
-      from: `${donation.org.name} via Give <${fromEmail}>`,
-      to: donation.donor.email,
-      subject: `Your donation receipt from ${donation.org.name} — ${receiptNumber}`,
-      html,
-      text,
-    });
-
-    if (error) {
-      logServerError(`Failed to send receipt email for donation ${donationId}`, {
-        donationId,
-        error,
-      });
-      return;
-    }
-
-    // Mark receipt as sent
-    await prisma.donation.update({
-      where: { id: donationId },
-      data: { receiptSentAt: new Date() },
-    });
-
-    console.log(
-      `Receipt email sent for donation ${donationId} to ${donation.donor.email} (receipt: ${receiptNumber})`
-    );
-  } catch (err) {
-    // Never propagate — a failed email must not fail the webhook
-    logServerError(
-      `Unexpected error sending receipt email for donation ${donationId}`,
-      { donationId, error: err }
-    );
+  if (!subscriptionId) {
+    console.warn("invoice.paid without subscriptionId:", invoice.id);
+    return;
   }
+
+  // Find the original "seed" donation for this subscription
+  const seedDonation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+    orderBy: { createdAt: "asc" },
+    include: { org: true },
+  });
+
+  if (!seedDonation) {
+    console.warn(
+      "invoice.paid: no donation found for subscription",
+      subscriptionId
+    );
+    return;
+  }
+
+  // If this is the first invoice (billing cycle 1), just mark the seed donation SUCCEEDED
+  const existingSucceeded = await prisma.donation.count({
+    where: { stripeSubscriptionId: subscriptionId, status: "SUCCEEDED" },
+  });
+
+  if (existingSucceeded === 0) {
+    // First payment — update the seed donation
+    const updated = await prisma.donation.update({
+      where: { id: seedDonation.id },
+      data: { status: "SUCCEEDED" },
+    });
+
+    await updateDonorAndCampaignAggregates(updated);
+    await sendReceiptEmail(updated.id, updated.orgId);
+    return;
+  }
+
+  // Subsequent billing cycles — create a new Donation record
+  const newDonation = await prisma.donation.create({
+    data: {
+      amountCents: seedDonation.amountCents,
+      currency: seedDonation.currency,
+      status: "SUCCEEDED",
+      frequency: seedDonation.frequency,
+      paymentMethod: seedDonation.paymentMethod,
+      processingFeeCents: seedDonation.processingFeeCents,
+      platformFeeCents: seedDonation.platformFeeCents,
+      netAmountCents: seedDonation.netAmountCents,
+      coverFees: seedDonation.coverFees,
+      totalChargedCents: seedDonation.totalChargedCents,
+      stripeSubscriptionId: subscriptionId,
+      stripeCustomerId: seedDonation.stripeCustomerId,
+      donorId: seedDonation.donorId,
+      campaignId: seedDonation.campaignId,
+      orgId: seedDonation.orgId,
+    },
+  });
+
+  await updateDonorAndCampaignAggregates(newDonation);
+  await sendReceiptEmail(newDonation.id, newDonation.orgId);
+}
+
+/**
+ * Handle invoice.payment_failed — update donation status and notify donor.
+ * Stripe will retry automatically based on Smart Retries settings.
+ */
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  const subscriptionId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : invoice.subscription?.id;
+
+  if (!subscriptionId) {
+    console.warn("invoice.payment_failed without subscriptionId:", invoice.id);
+    return;
+  }
+
+  const donation = await prisma.donation.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!donation) {
+    console.warn(
+      "invoice.payment_failed: no donation found for subscription",
+      subscriptionId
+    );
+    return;
+  }
+
+  // Mark as failed (Stripe will retry — do not permanently cancel yet)
+  await prisma.donation.update({
+    where: { id: donation.id },
+    data: { status: "FAILED" },
+  });
+
+  // TODO: send failed payment notification email to donor via Resend
+  console.log(
+    `Recurring payment failed for subscription ${subscriptionId}. ` +
+      `Donor: ${donation.donorId}. Stripe will retry automatically.`
+  );
+}
+
+/**
+ * Handle customer.subscription.deleted — subscription was cancelled (by donor or after retry exhaustion).
+ */
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  const subscriptionId = subscription.id;
+
+  // Find all donations for this subscription and mark them
+  const donations = await prisma.donation.findMany({
+    where: { stripeSubscriptionId: subscriptionId },
+    include: { donor: { select: { email: true, firstName: true } } },
+  });
+
+  if (donations.length === 0) {
+    console.warn(
+      "customer.subscription.deleted: no donations found for subscription",
+      subscriptionId
+    );
+    return;
+  }
+
+  await prisma.donation.updateMany({
+    where: { stripeSubscriptionId: subscriptionId },
+    data: { status: "FAILED" },
+  });
+
+  const donor = donations[0]?.donor;
+  console.log(
+    `Subscription ${subscriptionId} cancelled for donor ${donor?.email ?? "unknown"}.`
+  );
+
+  // TODO: send subscription cancellation confirmation email via Resend
 }
 
 async function handlePaymentIntentFailed(
@@ -419,28 +466,21 @@ async function handlePaymentIntentFailed(
 async function handleAccountUpdated(account: Stripe.Account) {
   if (!account.id) return;
 
-  // Find the org with this Stripe account
   const org = await prisma.organization.findUnique({
     where: { stripeAccountId: account.id },
   });
 
   if (!org) {
-    console.warn(
-      "account.updated for unknown Stripe account:",
-      account.id
-    );
+    console.warn("account.updated for unknown Stripe account:", account.id);
     return;
   }
 
-  // Check if onboarding is complete
-  const isOnboarded =
-    account.charges_enabled && account.payouts_enabled;
+  const isOnboarded = account.charges_enabled && account.payouts_enabled;
 
   const updateData: Record<string, unknown> = {
     stripeOnboarded: isOnboarded,
   };
 
-  // Move org to ACTIVE once Stripe onboarding is complete
   if (isOnboarded && org.status === "ONBOARDING") {
     updateData.status = "ACTIVE";
   }
@@ -457,9 +497,115 @@ async function handleAccountUpdated(account: Stripe.Account) {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-async function getFirstDonationDate(
-  donorId: string
-): Promise<Date> {
+async function updateDonorAndCampaignAggregates(donation: {
+  donorId: string;
+  campaignId: string;
+  amountCents: number;
+}) {
+  await Promise.all([
+    prisma.donor.update({
+      where: { id: donation.donorId },
+      data: {
+        totalGivenCents: { increment: donation.amountCents },
+        donationCount: { increment: 1 },
+        lastDonationAt: new Date(),
+        firstDonationAt: await getFirstDonationDate(donation.donorId),
+      },
+    }),
+    prisma.campaign.update({
+      where: { id: donation.campaignId },
+      data: {
+        raisedAmountCents: { increment: donation.amountCents },
+        donationCount: { increment: 1 },
+      },
+    }),
+  ]);
+}
+
+async function sendReceiptEmail(
+  donationId: string,
+  orgId: string
+): Promise<void> {
+  try {
+    const donation = await prisma.donation.findUnique({
+      where: { id: donationId },
+      include: {
+        donor: true,
+        campaign: true,
+        org: true,
+      },
+    });
+
+    if (!donation) {
+      logServerError(`sendReceiptEmail: donation ${donationId} not found`, {
+        donationId,
+      });
+      return;
+    }
+
+    let receiptNumber = donation.receiptNumber;
+    if (!receiptNumber) {
+      receiptNumber = await generateReceiptNumber(orgId, donation.createdAt);
+      await prisma.donation.update({
+        where: { id: donationId },
+        data: { receiptNumber },
+      });
+    }
+
+    const receiptData = {
+      orgName: donation.org.name,
+      orgEin: donation.org.ein,
+      donorFirstName: donation.donor.firstName,
+      donorLastName: donation.donor.lastName,
+      donorEmail: donation.donor.email,
+      amountCents: donation.amountCents,
+      currency: donation.currency,
+      donationDate: donation.createdAt,
+      receiptNumber,
+      campaignName: donation.campaign.title,
+      dedicationType: donation.dedicationType,
+      dedicationName: donation.dedicationName,
+    };
+
+    const html = buildDonationReceiptHtml(receiptData);
+    const text = buildDonationReceiptText(receiptData);
+
+    const resend = getResend();
+    const fromEmail = getFromEmail();
+
+    const { error } = await resend.emails.send({
+      from: `${donation.org.name} via Give <${fromEmail}>`,
+      to: donation.donor.email,
+      subject: `Your donation receipt from ${donation.org.name} — ${receiptNumber}`,
+      html,
+      text,
+    });
+
+    if (error) {
+      logServerError(`Failed to send receipt email for donation ${donationId}`, {
+        donationId,
+        error,
+      });
+      return;
+    }
+
+    await prisma.donation.update({
+      where: { id: donationId },
+      data: { receiptSentAt: new Date() },
+    });
+
+    console.log(
+      `Receipt email sent for donation ${donationId} to ${donation.donor.email} (receipt: ${receiptNumber})`
+    );
+  } catch (err) {
+    logServerError(
+      `Unexpected error sending receipt email for donation ${donationId}`,
+      { donationId, error: err }
+    );
+  }
+}
+
+async function getFirstDonationDate(donorId: string): Promise<Date> {
   const first = await prisma.donation.findFirst({
     where: { donorId, status: "SUCCEEDED" },
     orderBy: { createdAt: "asc" },

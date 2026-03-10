@@ -4,8 +4,15 @@ import { prisma } from "@give/db";
 import type { PlanTier as PrismaPlanTier } from "@give/db";
 import { calculateFees } from "../lib/fees.js";
 import { getApplicationFeeAmount } from "../lib/fees.js";
-import { createPaymentIntent } from "../lib/stripe.js";
+import {
+  createPaymentIntent,
+  createStripeCustomer,
+  createSubscriptionPrice,
+  createSubscription,
+  computeApplicationFeePercent,
+} from "../lib/stripe.js";
 import type { PlanTier, PaymentMethod } from "@give/shared";
+import { generateManageToken } from "../lib/manage-token.js";
 
 export const donationRoutes = new Hono();
 
@@ -55,6 +62,16 @@ const PAYMENT_METHOD_MAP = {
   apple_pay: "APPLE_PAY",
   google_pay: "GOOGLE_PAY",
 } as const;
+
+// Map donation frequency to Stripe interval
+const FREQUENCY_TO_INTERVAL: Record<
+  "monthly" | "quarterly" | "annual",
+  "month" | "year" | "week"
+> = {
+  monthly: "month",
+  quarterly: "month", // Stripe doesn't support quarterly natively — we use monthly x3 workaround
+  annual: "year",
+};
 
 function planTierToShared(tier: PrismaPlanTier): PlanTier {
   return tier === "PRO" ? "pro" : "basic";
@@ -132,67 +149,184 @@ donationRoutes.post("/", async (c) => {
       },
     });
 
-    // Create donation record
-    const donation = await prisma.donation.create({
-      data: {
-        amountCents: fees.donationAmount,
-        currency: input.currency,
-        status: "PENDING",
-        frequency: FREQUENCY_MAP[input.frequency],
-        paymentMethod: PAYMENT_METHOD_MAP[input.paymentMethod],
-        processingFeeCents: fees.processingFee,
-        platformFeeCents: fees.platformFee,
-        netAmountCents: fees.netToOrg,
-        coverFees: input.coverFees,
-        totalChargedCents: fees.totalCharged,
-        dedicationType: input.dedication?.type ?? null,
-        dedicationName: input.dedication?.name ?? null,
-        dedicationMessage: input.dedication?.message ?? null,
-        donorId: donor.id,
-        campaignId: campaign.id,
-        orgId: org.id,
-      },
-    });
+    const isRecurring = input.frequency !== "one_time";
 
-    // Create Stripe PaymentIntent on the connected account
-    const applicationFee = getApplicationFeeAmount(fees.platformFee);
+    if (isRecurring) {
+      // ── Recurring: Stripe Subscription ──────────────────
 
-    const paymentIntent = await createPaymentIntent(
-      fees.totalCharged,
-      applicationFee,
-      org.stripeAccountId,
-      {
-        donationId: donation.id,
-        campaignId: campaign.id,
-        orgId: org.id,
-        donorId: donor.id,
-      }
-    );
+      const interval =
+        FREQUENCY_TO_INTERVAL[
+          input.frequency as "monthly" | "quarterly" | "annual"
+        ];
 
-    // Update donation with Stripe PaymentIntent ID
-    await prisma.donation.update({
-      where: { id: donation.id },
-      data: {
-        stripePaymentIntentId: paymentIntent.id,
-        status: "PROCESSING",
-      },
-    });
+      // For quarterly, use 3-month interval_count
+      const intervalCount = input.frequency === "quarterly" ? 3 : 1;
 
-    return c.json(
-      {
-        donationId: donation.id,
-        clientSecret: paymentIntent.client_secret,
-        stripeAccountId: org.stripeAccountId,
-        fees: {
-          donationAmount: fees.donationAmount,
-          processingFee: fees.processingFee,
-          platformFee: fees.platformFee,
-          totalCharged: fees.totalCharged,
-          netToOrg: fees.netToOrg,
+      // Create or reuse a Stripe customer on the connected account
+      const stripeCustomer = await createStripeCustomer(
+        donor.email,
+        `${donor.firstName} ${donor.lastName}`,
+        org.stripeAccountId,
+        {
+          donorId: donor.id,
+          orgId: org.id,
+        }
+      );
+
+      // Create a price for this amount + interval
+      const price = await createStripeSubscriptionPrice(
+        fees.totalCharged,
+        input.currency,
+        interval,
+        intervalCount,
+        org.stripeAccountId,
+        `${campaign.title} — ${input.frequency} donation`
+      );
+
+      // Application fee percent for Connect
+      const appFeePercent = computeApplicationFeePercent(
+        fees.platformFee,
+        fees.totalCharged
+      );
+
+      // Create donation record first (PENDING)
+      const donation = await prisma.donation.create({
+        data: {
+          amountCents: fees.donationAmount,
+          currency: input.currency,
+          status: "PENDING",
+          frequency: FREQUENCY_MAP[input.frequency],
+          paymentMethod: PAYMENT_METHOD_MAP[input.paymentMethod],
+          processingFeeCents: fees.processingFee,
+          platformFeeCents: fees.platformFee,
+          netAmountCents: fees.netToOrg,
+          coverFees: input.coverFees,
+          totalChargedCents: fees.totalCharged,
+          dedicationType: input.dedication?.type ?? null,
+          dedicationName: input.dedication?.name ?? null,
+          dedicationMessage: input.dedication?.message ?? null,
+          donorId: donor.id,
+          campaignId: campaign.id,
+          orgId: org.id,
+          stripeCustomerId: stripeCustomer.id,
         },
-      },
-      201
-    );
+      });
+
+      // Create Stripe Subscription
+      const subscription = await createSubscription(
+        stripeCustomer.id,
+        price.id,
+        appFeePercent,
+        org.stripeAccountId,
+        {
+          donationId: donation.id,
+          campaignId: campaign.id,
+          orgId: org.id,
+          donorId: donor.id,
+        }
+      );
+
+      // Extract PaymentIntent client_secret from the latest invoice
+      const latestInvoice = subscription.latest_invoice as
+        | { payment_intent?: { client_secret?: string | null } }
+        | null;
+      const clientSecret =
+        latestInvoice?.payment_intent?.client_secret ?? null;
+
+      // Update donation with subscription ID
+      await prisma.donation.update({
+        where: { id: donation.id },
+        data: {
+          stripeSubscriptionId: subscription.id,
+          status: "PROCESSING",
+        },
+      });
+
+      // Generate management token for self-service portal link
+      // TODO: include this token in receipt email (Resend integration pending)
+      const manageToken = generateManageToken(donor.id, org.id);
+      const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
+      const manageUrl = `${baseUrl}/manage/${manageToken}`;
+
+      return c.json(
+        {
+          donationId: donation.id,
+          clientSecret,
+          stripeAccountId: org.stripeAccountId,
+          subscriptionId: subscription.id,
+          manageUrl,
+          fees: {
+            donationAmount: fees.donationAmount,
+            processingFee: fees.processingFee,
+            platformFee: fees.platformFee,
+            totalCharged: fees.totalCharged,
+            netToOrg: fees.netToOrg,
+          },
+        },
+        201
+      );
+    } else {
+      // ── One-time: Stripe PaymentIntent ───────────────────
+
+      const donation = await prisma.donation.create({
+        data: {
+          amountCents: fees.donationAmount,
+          currency: input.currency,
+          status: "PENDING",
+          frequency: FREQUENCY_MAP[input.frequency],
+          paymentMethod: PAYMENT_METHOD_MAP[input.paymentMethod],
+          processingFeeCents: fees.processingFee,
+          platformFeeCents: fees.platformFee,
+          netAmountCents: fees.netToOrg,
+          coverFees: input.coverFees,
+          totalChargedCents: fees.totalCharged,
+          dedicationType: input.dedication?.type ?? null,
+          dedicationName: input.dedication?.name ?? null,
+          dedicationMessage: input.dedication?.message ?? null,
+          donorId: donor.id,
+          campaignId: campaign.id,
+          orgId: org.id,
+        },
+      });
+
+      const applicationFee = getApplicationFeeAmount(fees.platformFee);
+
+      const paymentIntent = await createPaymentIntent(
+        fees.totalCharged,
+        applicationFee,
+        org.stripeAccountId,
+        {
+          donationId: donation.id,
+          campaignId: campaign.id,
+          orgId: org.id,
+          donorId: donor.id,
+        }
+      );
+
+      await prisma.donation.update({
+        where: { id: donation.id },
+        data: {
+          stripePaymentIntentId: paymentIntent.id,
+          status: "PROCESSING",
+        },
+      });
+
+      return c.json(
+        {
+          donationId: donation.id,
+          clientSecret: paymentIntent.client_secret,
+          stripeAccountId: org.stripeAccountId,
+          fees: {
+            donationAmount: fees.donationAmount,
+            processingFee: fees.processingFee,
+            platformFee: fees.platformFee,
+            totalCharged: fees.totalCharged,
+            netToOrg: fees.netToOrg,
+          },
+        },
+        201
+      );
+    }
   } catch (err) {
     console.error("Error creating donation:", err);
     return c.json({ error: "Failed to create donation" }, 500);
@@ -313,3 +447,94 @@ donationRoutes.get("/", async (c) => {
     return c.json({ error: "Failed to list donations" }, 500);
   }
 });
+
+// ─── GET /recurring — Recurring donors & MRR metrics ─────
+
+donationRoutes.get("/recurring/metrics", async (c) => {
+  const orgId = c.req.query("orgId");
+  if (!orgId) {
+    return c.json({ error: "orgId is required" }, 400);
+  }
+
+  try {
+    // All active recurring donations (unique subscriptions)
+    const recurringDonations = await prisma.donation.findMany({
+      where: {
+        orgId,
+        stripeSubscriptionId: { not: null },
+        frequency: { not: "ONE_TIME" },
+        status: "SUCCEEDED",
+      },
+      distinct: ["stripeSubscriptionId"],
+      include: {
+        donor: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // MRR: normalize all frequencies to monthly equivalent
+    const mrrCents = recurringDonations.reduce((sum, d) => {
+      switch (d.frequency) {
+        case "MONTHLY":
+          return sum + d.amountCents;
+        case "QUARTERLY":
+          return sum + Math.round(d.amountCents / 3);
+        case "ANNUAL":
+          return sum + Math.round(d.amountCents / 12);
+        default:
+          return sum;
+      }
+    }, 0);
+
+    // Failed/churned subscriptions in last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const churnedCount = await prisma.donation.count({
+      where: {
+        orgId,
+        stripeSubscriptionId: { not: null },
+        status: "FAILED",
+        updatedAt: { gte: thirtyDaysAgo },
+      },
+    });
+
+    return c.json({
+      recurringDonors: recurringDonations.length,
+      mrrCents,
+      churnedLast30Days: churnedCount,
+      donors: recurringDonations,
+    });
+  } catch (err) {
+    console.error("Error fetching recurring metrics:", err);
+    return c.json({ error: "Failed to fetch recurring metrics" }, 500);
+  }
+});
+
+// ─── Helpers ──────────────────────────────────────────────
+
+// Wrapper to support quarterly (interval_count=3) via stripe.prices.create
+async function createStripeSubscriptionPrice(
+  amountCents: number,
+  currency: string,
+  interval: "month" | "year" | "week",
+  intervalCount: number,
+  stripeAccountId: string,
+  productName: string
+) {
+  const { stripe } = await import("../lib/stripe.js");
+  return stripe.prices.create(
+    {
+      currency,
+      unit_amount: amountCents,
+      recurring: { interval, interval_count: intervalCount },
+      product_data: { name: productName },
+    },
+    { stripeAccount: stripeAccountId }
+  );
+}

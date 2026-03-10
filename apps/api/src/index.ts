@@ -11,6 +11,7 @@ import { donationRoutes } from "./routes/donations.js";
 import { donorRoutes } from "./routes/donors.js";
 import { stripeRoutes } from "./routes/stripe.js";
 import { clerkWebhookRoutes } from "./routes/clerk-webhooks.js";
+import { manageRoutes } from "./routes/manage.js";
 import { clerkAuth, requireOrgAccess } from "./middleware/auth.js";
 import type { AuthVariables } from "./middleware/auth.js";
 import { publicRateLimit, authRateLimit } from "./middleware/rate-limit.js";
@@ -37,6 +38,10 @@ app.route("/api/health", healthRoutes);
 // Stripe webhooks & connect — exempt from rate limiting (Stripe IPs are trusted)
 // Must stay public; signature verification happens inside the route handler.
 app.route("/api/stripe", stripeRoutes);
+
+// Donor self-service (token-authenticated, no Clerk required)
+app.use("/api/manage/*", publicRateLimit);
+app.route("/api/manage", manageRoutes);
 
 // Clerk webhooks — verified by svix signature, not Clerk JWT
 // Note: no clerkAuth middleware — Clerk calls this directly
