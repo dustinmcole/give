@@ -599,3 +599,46 @@ export function removeDonorTag(
   });
 }
 
+
+export interface RecentDonor {
+  firstName: string;
+  lastName: string;
+  amountCents: number;
+  createdAt: string;
+  anonymous: boolean;
+}
+
+export interface PublicCampaign {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  type: string;
+  status: string;
+  goalAmountCents: number;
+  raisedAmountCents: number;
+  donationCount: number;
+  coverImageUrl?: string | null;
+  color?: string | null;
+  showDonorRoll: boolean;
+  showGoal: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+  suggestedAmounts?: number[];
+  allowCustomAmount?: boolean;
+  allowRecurring?: boolean;
+  recentDonors: RecentDonor[];
+  goalProgress: number | null;
+  org?: {
+    id: string;
+    name: string;
+    slug: string;
+    logoUrl?: string | null;
+    ein?: string | null;
+  };
+}
+
+/** Public campaign endpoint — returns donor roll, org branding, etc. */
+export function getPublicCampaign(id: string): Promise<PublicCampaign> {
+  return request<PublicCampaign>(`/api/campaigns/${id}/public`);
+}
