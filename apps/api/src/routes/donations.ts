@@ -36,6 +36,12 @@ const createDonationSchema = z.object({
 const listDonationsSchema = z.object({
   orgId: z.string().min(1),
   campaignId: z.string().optional(),
+  status: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  search: z.string().optional(),
+  sortBy: z.enum(["createdAt", "amountCents", "status"]).default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -255,6 +261,12 @@ donationRoutes.get("/", async (c) => {
   const query = listDonationsSchema.safeParse({
     orgId: c.req.query("orgId"),
     campaignId: c.req.query("campaignId"),
+    status: c.req.query("status"),
+    startDate: c.req.query("startDate"),
+    endDate: c.req.query("endDate"),
+    search: c.req.query("search"),
+    sortBy: c.req.query("sortBy"),
+    sortOrder: c.req.query("sortOrder"),
     page: c.req.query("page"),
     limit: c.req.query("limit"),
   });
@@ -266,9 +278,27 @@ donationRoutes.get("/", async (c) => {
     );
   }
 
-  const { orgId, campaignId, page, limit } = query.data;
+  const { orgId, campaignId, status, startDate, endDate, search, sortBy, sortOrder, page, limit } = query.data;
   const skip = (page - 1) * limit;
-  const whereClause = campaignId ? { orgId, campaignId } : { orgId };
+
+  const whereClause: Record<string, unknown> = { orgId };
+  if (campaignId) whereClause.campaignId = campaignId;
+  if (status) whereClause.status = status.toUpperCase();
+  if (startDate || endDate) {
+    whereClause.createdAt = {
+      ...(startDate ? { gte: new Date(startDate) } : {}),
+      ...(endDate ? { lte: new Date(endDate) } : {}),
+    };
+  }
+  if (search) {
+    whereClause.donor = {
+      OR: [
+        { firstName: { contains: search, mode: "insensitive" } },
+        { lastName: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+      ],
+    };
+  }
 
   try {
     const [donations, total] = await Promise.all([
@@ -292,7 +322,7 @@ donationRoutes.get("/", async (c) => {
             },
           },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { [sortBy]: sortOrder },
         skip,
         take: limit,
       }),
